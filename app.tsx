@@ -19,7 +19,6 @@ import {
   Select,
   Skeleton,
   Switch,
-  Tabs,
   TextArea,
   TextField,
   Toast,
@@ -31,43 +30,71 @@ import {
   ArrowRight,
   ArrowUpRight,
   Bell,
+  Bluetooth,
   BookOpen,
   Check,
   ChevronDown,
   ChevronRight,
   ClipboardList,
   CloudSun,
+  DollarSign,
   Download,
   FileText,
-  FlaskConical,
-  Feather,
   Footprints,
   Globe,
+  GraduationCap,
   Heart,
+  HeartPulse,
+  Hospital,
   House,
   Info,
+  Languages,
   Leaf,
   LogOut,
   MapPin,
   MessageCircle,
-  Microscope,
+  Mic,
+  Moon,
   MoreHorizontal,
+  Phone,
+  Pill,
   Plus,
   Printer,
+  Radar,
   Radio,
   RefreshCw,
-  ShieldCheck,
+  Siren,
   SlidersHorizontal,
   Sparkles,
+  Stethoscope,
+  Sun,
   Thermometer,
   TriangleAlert,
   Upload,
   User,
+  Users,
   Wind,
   X,
 } from "lucide-react";
 import { BackgroundGradient } from "./components/background-gradient";
-import { answerQuestion, getOutlook, initialLogs, observations } from "./mock";
+import {
+  answerQuestion,
+  emergencyContacts,
+  getForecast,
+  getOutlook,
+  guidance,
+  inhalerSteps,
+  initialLogs,
+  languages,
+  medications,
+  observations,
+  sbResources,
+  triggerProfiles,
+  tr,
+  type Language,
+  type LogEntry,
+  type DemoMode,
+} from "./mock";
 import {
   BreathingChart,
   NightScatter,
@@ -76,22 +103,40 @@ import {
   SignalChart,
   CompletenessGauge,
   SymptomBars,
+  AqiAverageChart,
+  TodayVsAverageChart,
+  MiniBars,
+  RiskForecastChart,
 } from "./charts";
 import { EntryFlow } from "./auth-flow";
-import type { DemoMode, LogEntry } from "./mock";
+import { Panel, Row, GroupCard } from "./ui";
+import { ThemeContext, type Theme } from "./theme";
+
 const pages = [
-  ["Dashboard", House, "Home"],
+  ["Summary", House, "Summary"],
   ["Take a Measurement", Wind, "Measure"],
+  ["Triggers", Radar, "Triggers"],
   ["Personal Patterns", Activity, "Patterns"],
   ["Symptom & Medication Log", ClipboardList, "Log"],
+  ["Medications", Pill, "Meds"],
+  ["Community", Users, "Community"],
   ["Care Plan & Reports", FileText, "Care"],
+  ["Settings", MoreHorizontal, "More"],
+];
+const tabs = [
+  ["Summary", House, "Summary"],
+  ["Take a Measurement", Wind, "Measure"],
+  ["Symptom & Medication Log", ClipboardList, "Log"],
+  ["Community", Users, "Community"],
+  ["Settings", MoreHorizontal, "More"],
 ];
 const questions = [
-  "Why did my outlook change?",
+  "Why did my risk level change?",
   "What information is missing?",
   "What patterns appear in my logs?",
   "Summarize my week.",
 ];
+
 function stored(key: string, fallback: any) {
   try {
     return (
@@ -160,38 +205,9 @@ function Tag({ children, tone = "neutral", icon: Icon }: any) {
     </Chip>
   );
 }
-function Panel({
-  title,
-  subtitle,
-  icon: Icon,
-  tone = "",
-  action,
-  children,
-  className = "",
-}: any) {
-  return (
-    <Card className={"panel " + tone + " " + className}>
-      <Card.Header>
-        <div className="panel-heading">
-          <div className="panel-title">
-            {Icon && <Icon size={18} />}
-            <Card.Title>{title}</Card.Title>
-          </div>
-          {action}
-        </div>
-        {subtitle && <Card.Description>{subtitle}</Card.Description>}
-      </Card.Header>
-      <Card.Content>{children}</Card.Content>
-    </Card>
-  );
-}
 function Meter({ value, label, tone = "" }: any) {
   return (
-    <ProgressBar
-      value={value}
-      aria-label={label}
-      className={"app-meter " + tone}
-    >
+    <ProgressBar value={value} aria-label={label} className={"app-meter " + tone}>
       <ProgressBar.Track>
         <ProgressBar.Fill />
       </ProgressBar.Track>
@@ -227,784 +243,12 @@ function Toggle({ children, value, onChange }: any) {
     </Switch>
   );
 }
-function App() {
-  const [page, setPage] = useState("Dashboard");
-  const [mode, setMode] = useDemoPreference("mode", "Typical");
-  const [connected, setConnected] = useDemoPreference("connected", true);
-  const [reading, setReading] = useDemoPreference("reading", 412);
-  const [language, setLanguage] = useDemoPreference("language", "English");
-  const [reminders, setReminders] = useDemoPreference("reminders", true);
-  const [persist, setPersist] = useDemoPreference("preferences", true);
-  const [logs, setLogs] = useState<LogEntry[]>(initialLogs);
-  const [careFile, setCareFile] = useState<File | null>(null);
-  const [outdoorActivity, setOutdoorActivity] = useState(
-    "Soccer practice · 4:00 PM",
-  );
-  const [dialog, setDialog] = useState("");
-  const [answer, setAnswer] = useState(-1);
-  const [refresh, setRefresh] = useState(false);
-  const [synced, setSynced] = useState("Today, 8:42 AM");
-  const outlook = getOutlook(mode, reading);
-  const missing = mode === "Missing data";
-  const inconsistent = mode === "Inconsistent";
-  const date = new Date().toLocaleDateString("en-US", {
-    timeZone: "America/New_York",
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
-  function exportData() {
-    const url = URL.createObjectURL(
-      new Blob(
-        [
-          JSON.stringify(
-            {
-              label: "AsthmaGuard SB simulated data",
-              reading,
-              mode,
-              logs,
-              observations,
-            },
-            null,
-            2,
-          ),
-        ],
-        { type: "application/json" },
-      ),
-    );
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "asthmaguard-demo-report.json";
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success("Demo data exported");
-  }
-  function reload() {
-    setRefresh(true);
-    setTimeout(() => {
-      setRefresh(false);
-      setSynced("Just now");
-      toast.success("Simulated data refreshed");
-    }, 700);
-  }
-  const nav = (p: string) => {
-    setPage(p);
-    window.scrollTo({ top: 0, behavior: "instant" });
-  };
-  return (
-    <div
-      className={
-        "asthma-app dark " + (page === "Dashboard" ? "is-dashboard" : "")
-      }
-    >
-      <Toast.Provider placement="top" />
-      <aside className="sidebar">
-        <div className="wordmark">
-          <Feather size={27} />
-          <div>
-            AsthmaGuard<span>SB</span>
-          </div>
-        </div>
-        <p className="sidebar-label">A LITTLE MORE PEACE OF MIND.</p>
-        <div className="sidebar-nav">
-          {pages.map(([name, Icon]) => (
-            <Button
-              key={name as string}
-              variant="ghost"
-              className={"side-link " + (page === name ? "selected" : "")}
-              onPress={() => nav(name as string)}
-            >
-              <Icon size={19} />
-              {name as string}
-              {page === name && <ChevronRight size={15} />}
-            </Button>
-          ))}
-        </div>
-        <Card className="sidebar-device">
-          <Card.Content>
-            <div>
-              <Radio size={17} />
-              <strong>Breathing prototype</strong>
-            </div>
-            <span>
-              {connected ? "Connected to demo device" : "Device disconnected"}
-            </span>
-            <Button
-              size="sm"
-              variant="ghost"
-              onPress={() => setConnected(!connected)}
-            >
-              {connected ? "Disconnect" : "Connect demo device"}
-              <ArrowRight size={13} />
-            </Button>
-          </Card.Content>
-        </Card>
-        <div className="sidebar-bottom">
-          <Tag icon={FlaskConical}>Demo mode · Simulated data</Tag>
-          <p>Designed for students & families.</p>
-        </div>
-      </aside>
-      <main className="main-content">
-        <header className="app-header">
-          <div className="mobile-wordmark">
-            <Feather size={23} />
-            <span>
-              AsthmaGuard <b>SB</b>
-            </span>
-          </div>
-          <span className="location">
-            <MapPin size={13} />
-            South Brunswick, NJ
-          </span>
-          <div className="header-tools">
-            <Pick
-              label="Language"
-              value={language}
-              onChange={setLanguage}
-              items={["English", "Spanish", "Hindi", "Gujarati"]}
-              className="language-select"
-            />
-            <Popover>
-              <Button
-                variant="ghost"
-                className="updates-trigger"
-                aria-label="Notifications"
-              >
-                Updates
-              </Button>
-              <Popover.Content className="app-popover">
-                <Popover.Dialog>
-                  <Popover.Heading>Today’s reminders</Popover.Heading>
-                  <p>
-                    Symptom check-in at 6:00 PM. Prototype measurement at 7:00
-                    PM.
-                  </p>
-                </Popover.Dialog>
-              </Popover.Content>
-            </Popover>
-            <Dropdown>
-              <Button
-                variant="ghost"
-                className="profile-trigger"
-                aria-label="Profile menu"
-              >
-                <Avatar size="sm">
-                  <Avatar.Fallback>JL</Avatar.Fallback>
-                </Avatar>
-                <span className="profile-name">Jamie</span>
-                <ChevronDown size={12} />
-              </Button>
-              <Dropdown.Popover>
-                <Dropdown.Menu
-                  aria-label="Profile options"
-                  onAction={(key) =>
-                    key === "care"
-                      ? nav("Care Plan & Reports")
-                      : key === "welcome"
-                        ? (location.hash = "welcome")
-                        : key === "signout"
-                          ? (location.hash = "signin")
-                          : setDialog("Profile")
-                  }
-                >
-                  <Dropdown.Item id="welcome" textValue="Welcome tour">
-                    <Feather size={16} />
-                    Welcome tour
-                  </Dropdown.Item>
-                  <Dropdown.Item id="signout" textValue="Sign out of demo">
-                    <LogOut size={16} />
-                    Sign out of demo
-                  </Dropdown.Item>
-                  <Dropdown.Item id="profile" textValue="Demo profile">
-                    <User size={16} />
-                    Demo profile
-                  </Dropdown.Item>
-                  <Dropdown.Item id="care" textValue="Privacy and care plan">
-                    <ShieldCheck size={16} />
-                    Privacy & care plan
-                  </Dropdown.Item>
-                </Dropdown.Menu>
-              </Dropdown.Popover>
-            </Dropdown>
-          </div>
-        </header>
-        <div className="mobile-demo">
-          <Tag icon={FlaskConical}>Demo mode — simulated data</Tag>
-          <span>
-            <MapPin size={10} /> South Brunswick
-          </span>
-        </div>
-        <section className="page-heading">
-          <div>
-            <p className="date-label">{date}</p>
-            <h1>
-              {page === "Dashboard" ? (
-                <>
-                  Your breathing, <span>at a glance.</span>
-                </>
-              ) : page === "Take a Measurement" ? (
-                <>
-                  One breath.<span> A little more insight.</span>
-                </>
-              ) : page === "Personal Patterns" ? (
-                <>
-                  Your days,<span> connected.</span>
-                </>
-              ) : page === "Symptom & Medication Log" ? (
-                <>
-                  How are you<span> feeling?</span>
-                </>
-              ) : (
-                <>
-                  Your care,<span> in one place.</span>
-                </>
-              )}
-            </h1>
-            <p>
-              {page === "Dashboard"
-                ? "Good morning, Jamie. Here’s your breathing space."
-                : page === "Take a Measurement"
-                  ? "A guided, simulated prototype measurement."
-                  : page === "Personal Patterns"
-                    ? "Explore tentative associations in your demo data."
-                    : page === "Symptom & Medication Log"
-                      ? "Make a little room to check in with yourself."
-                      : "Your saved plan, reminders, and reports."}
-            </p>
-          </div>
-          <div className="heading-actions">
-            <Tag icon={Radio} tone={connected ? "mint" : "amber"}>
-              {connected ? "Device connected" : "Disconnected"}
-            </Tag>
-            <Button
-              isIconOnly
-              variant="ghost"
-              className="icon-btn"
-              aria-label="Refresh demo data"
-              onPress={reload}
-            >
-              <RefreshCw size={16} className={refresh ? "spinning" : ""} />
-            </Button>
-          </div>
-        </section>
-        <div className="demo-controls">
-          <div>
-            <FlaskConical size={13} />
-            <span>SIMULATED PREVIEW</span>
-          </div>
-          <Pick
-            label="Demo state"
-            value={mode}
-            onChange={setMode}
-            items={["Typical", "Missing data", "Inconsistent"]}
-          />
-        </div>
-        {language !== "English" && (
-          <Alert className="app-alert">
-            <Alert.Content>
-              <Alert.Description>
-                {language} preference saved. This prototype’s content is
-                available in English.
-              </Alert.Description>
-            </Alert.Content>
-          </Alert>
-        )}
-        {refresh ? (
-          <div className="loading-grid" aria-label="Loading demo data">
-            <Skeleton className="loading-card" />
-            <Skeleton className="loading-card" />
-            <Skeleton className="loading-card" />
-          </div>
-        ) : (
-          <>
-            {page === "Dashboard" && (
-              <>
-                <div className="dashboard-grid">
-                  <div className="flavor-grid">
-                    <Panel
-                      title="A little rhythm in every breath."
-                      subtitle="Prototype signal · Illustrative sample window"
-                      icon={Wind}
-                      tone="signal-coral"
-                      action={<Tag>Simulated</Tag>}
-                    >
-                      <div className="signal-summary">
-                        <strong>
-                          24<span>samples</span>
-                        </strong>
-                        <span>
-                          Arbitrary units
-                          <br />
-                          8:30–9:15 AM
-                        </span>
-                      </div>
-                      <SignalChart />
-                      <div className="signal-bottom">
-                        <span>Incoming signal, a closer look.</span>
-                        <Button
-                          variant="ghost"
-                          className="text-btn"
-                          onPress={() => nav("Take a Measurement")}
-                        >
-                          Try the demo
-                          <ArrowUpRight size={14} />
-                        </Button>
-                      </div>
-                    </Panel>
-                    <Panel
-                      title="Showing up for yourself."
-                      subtitle="Your week’s data completeness"
-                      icon={Heart}
-                      tone="gauge-mint"
-                      action={<Tag>Oct 12–18</Tag>}
-                    >
-                      <CompletenessGauge />
-                      <div className="gauge-legend">
-                        <span>
-                          <Check size={12} />6 logged days
-                        </span>
-                        <span>1 day missing</span>
-                      </div>
-                      <p className="microcopy">
-                        Logged days, not a wellness score or health assessment.
-                      </p>
-                    </Panel>
-                  </div>
 
-                  <Panel
-                    title="Breathing measurement"
-                    icon={Wind}
-                    tone="breathing"
-                    action={
-                      <Tag
-                        tone={
-                          missing ? "neutral" : inconsistent ? "amber" : "mint"
-                        }
-                      >
-                        {missing
-                          ? "Insufficient data"
-                          : inconsistent
-                            ? "Inconsistent"
-                            : "Usable"}
-                      </Tag>
-                    }
-                  >
-                    <div className="reading-value">
-                      {missing ? 412 : reading}
-                      <span>arbitrary units</span>
-                    </div>
-                    <div className="baseline-note">
-                      <ArrowDownRight size={14} />
-                      {missing
-                        ? "Simulated history · live reading unavailable"
-                        : `${((Math.abs(420 - reading) / 420) * 100).toFixed(1)}% ${reading <= 420 ? "below" : "above"} your recorded baseline`}
-                    </div>
-                    <BreathingChart missing={missing} reading={reading} />
-                    <div className="chart-footnote">
-                      <span>OCT 12–18 · SIMULATED</span>
-                      <span>Dashed line: your baseline</span>
-                    </div>
-                    <div className="reading-meta">
-                      <span>
-                        Baseline <b>420 a.u.</b>
-                      </span>
-                      <span>
-                        Last sync <b>{synced}</b>
-                      </span>
-                    </div>
-                    <Button
-                      className="primary-btn"
-                      onPress={() => nav("Take a Measurement")}
-                    >
-                      <Wind size={16} />
-                      Take a measurement
-                      <ArrowRight size={15} />
-                    </Button>
-                    <p className="microcopy">
-                      Simulated, uncalibrated prototype. Not clinical peak flow.
-                    </p>
-                  </Panel>
-                  <BackgroundGradient
-                    animate={false}
-                    containerClassName="outlook-gradient"
-                    className="outlook-content"
-                  >
-                    <Panel
-                      title="Experimental symptom outlook"
-                      icon={Sparkles}
-                      tone="outlook"
-                      action={<Tag tone="amber">Limited evidence</Tag>}
-                    >
-                      <div className="outlook-eyebrow">
-                        <span /> NEXT CHECK-IN · TODAY, 6–8 PM
-                      </div>
-                      <h2>{outlook.headline}</h2>
-                      <div className="outlook-change">
-                        <ArrowUpRight size={16} />
-                        {outlook.change}
-                      </div>
-                      <p className="outlook-summary">
-                        {missing
-                          ? "Recent inputs are unavailable. Refreshing the demo will not replace missing observations."
-                          : inconsistent
-                            ? "The latest attempt did not pass consistency checks. The last usable reading is retained."
-                            : "A few signals have shifted. Your recent logs and regional air conditions are contributing inputs."}
-                      </p>
-                      {!missing && (
-                        <div className="outlook-chart">
-                          <div>
-                            <span>Regional air, this week</span>
-                            <b>
-                              86 <small>AQI</small>
-                            </b>
-                          </div>
-                          <PollutionChart compact />
-                        </div>
-                      )}
-                      <Expand title="Why this estimate?">
-                        <h4>Contributing inputs</h4>
-                        <ul>
-                          {(missing
-                            ? ["Recent inputs are unavailable."]
-                            : outlook.inputs
-                          ).map((s) => (
-                            <li key={s}>{s}</li>
-                          ))}
-                        </ul>
-                        <h4>Missing inputs</h4>
-                        <ul>
-                          {outlook.missing.map((s) => (
-                            <li key={s}>{s}</li>
-                          ))}
-                        </ul>
-                        <p>{outlook.limitations}</p>
-                      </Expand>
-                      <div className="outlook-foot">
-                        <span>
-                          <FlaskConical size={12} /> Simulated outlook
-                        </span>
-                        <span>Updated 8:45 AM</span>
-                      </div>
-                    </Panel>
-                  </BackgroundGradient>
-                  <Panel
-                    title="Outside your window"
-                    subtitle="Regional conditions · All values simulated"
-                    icon={CloudSun}
-                    tone="environment"
-                    action={
-                      <Tag tone="amber">
-                        {missing ? "Stale data" : "Moderate AQI"}
-                      </Tag>
-                    }
-                  >
-                    <div className="environment-main">
-                      <strong>
-                        {missing ? "—" : "86"}
-                        <span>AQI</span>
-                      </strong>
-                      <div>
-                        <span>
-                          {missing
-                            ? "Update unavailable"
-                            : "A little extra awareness."}
-                        </span>
-                        <p>
-                          {missing
-                            ? "Latest conditions could not be retrieved."
-                            : "Regional air quality is moderate in this demo."}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="environment-grid">
-                      {[
-                        [Wind, "PM2.5", missing ? "Unavailable" : "22 µg/m³"],
-                        [CloudSun, "Ozone", missing ? "Unavailable" : "41 ppb"],
-                        [
-                          Thermometer,
-                          "Temperature",
-                          missing ? "Unavailable" : "64°F",
-                        ],
-                        [Wind, "Humidity", missing ? "Unavailable" : "58%"],
-                        [Leaf, "Pollen", "Unavailable"],
-                      ].map(([Icon, label, value]) => (
-                        <Card key={label as string} className="env-tile">
-                          <Card.Content>
-                            <Icon size={16} />
-                            <span>{label as string}</span>
-                            <strong>{value as string}</strong>
-                          </Card.Content>
-                        </Card>
-                      ))}
-                    </div>
-                    <div className="source-note">
-                      Source: demo placeholder · Middlesex County region
-                      <br />
-                      {missing
-                        ? "Last available: yesterday, 8:30 AM"
-                        : "Updated today, 8:30 AM"}{" "}
-                      · Personal exposure may vary.
-                    </div>
-                  </Panel>
-                  <Panel
-                    title="Today, at your pace"
-                    subtitle="Small check-ins. A little more continuity."
-                    icon={ClipboardList}
-                    tone="plan"
-                  >
-                    <PlanRows
-                      reminders={reminders}
-                      activity={outdoorActivity}
-                    />
-                    <Expand title="Edit outdoor activity">
-                      <TextField
-                        className="app-field"
-                        value={outdoorActivity}
-                        onChange={setOutdoorActivity}
-                      >
-                        <Label>Your planned activity & time</Label>
-                        <Input maxLength={100} />
-                      </TextField>
-                    </Expand>
-                    <Button
-                      variant="ghost"
-                      className="text-btn"
-                      onPress={() => nav("Care Plan & Reports")}
-                    >
-                      View my saved care plan
-                      <ChevronRight size={15} />
-                    </Button>
-                  </Panel>
-                </div>
-                <div className="section-title">
-                  <div>
-                    <h2>Little signals. Possible connections.</h2>
-                    <p>Patterns to explore, with room for uncertainty.</p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    className="text-btn"
-                    onPress={() => nav("Personal Patterns")}
-                  >
-                    All patterns
-                    <ArrowRight size={15} />
-                  </Button>
-                </div>
-                <div className="patterns-grid">
-                  {[
-                    [
-                      "Pollution & symptoms",
-                      Wind,
-                      "4 / 4",
-                      "higher-AQI days with reported symptoms",
-                      "rose",
-                    ],
-                    [
-                      "Outdoor days & symptoms",
-                      Footprints,
-                      "4 / 4",
-                      "outdoor days with symptom reports",
-                      "coral",
-                    ],
-                    [
-                      "Nighttime & next day",
-                      Activity,
-                      "1",
-                      "nighttime report available",
-                      "indigo",
-                    ],
-                  ].map(([title, Icon, n, note, tone], i) => (
-                    <Panel
-                      key={title as string}
-                      title={title}
-                      icon={Icon}
-                      tone={tone}
-                    >
-                      <Tag>Possible association</Tag>
-                      <div className="pattern-number">
-                        {n as string}
-                        <span>{note as string}</span>
-                      </div>
-                      {i === 0 ? (
-                        <PollutionChart />
-                      ) : i === 1 ? (
-                        <SymptomMix />
-                      ) : (
-                        <div className="night-curve">
-                          <NightScatter />
-                          <span>
-                            Only 1 nighttime report · Too little to infer a
-                            pattern
-                          </span>
-                        </div>
-                      )}
-                      <div className="pattern-bottom">
-                        <span>
-                          Limited evidence ·{" "}
-                          {i === 2 ? "1 night" : "6 logged days"}
-                        </span>
-                        <Button
-                          isIconOnly
-                          variant="ghost"
-                          aria-label={"Explore " + title}
-                          onPress={() => {
-                            setPatternFocus(i);
-                            nav("Personal Patterns");
-                          }}
-                        >
-                          <ArrowUpRight size={18} />
-                        </Button>
-                      </div>
-                    </Panel>
-                  ))}
-                </div>
-                <Panel
-                  title="A little context, when you need it."
-                  subtitle="Ask AsthmaGuard · Simulated responses grounded in this demo"
-                  icon={MessageCircle}
-                  className="assistant-panel"
-                >
-                  <div className="question-grid">
-                    {questions.map((q, i) => (
-                      <Button
-                        variant="ghost"
-                        className={
-                          answer === i ? "question selected" : "question"
-                        }
-                        key={q}
-                        onPress={() => setAnswer(i)}
-                      >
-                        {q}
-                        <ArrowUpRight size={14} />
-                      </Button>
-                    ))}
-                  </div>
-                  {answer >= 0 && (
-                    <Alert className="assistant-answer">
-                      <Alert.Content>
-                        <Alert.Title>Simulated response</Alert.Title>
-                        <Alert.Description>
-                          {answerQuestion(answer, mode, reading, logs.length)}
-                        </Alert.Description>
-                      </Alert.Content>
-                    </Alert>
-                  )}
-                </Panel>
-              </>
-            )}
-            {page === "Take a Measurement" && (
-              <Measurement
-                connected={connected}
-                setConnected={setConnected}
-                mode={mode}
-                onSave={(value: number) => {
-                  setReading(value);
-                  setMode("Typical");
-                  setSynced("Just now");
-                  toast.success(
-                    "New measurement included in your experimental outlook.",
-                  );
-                  nav("Dashboard");
-                }}
-              />
-            )}
-            {page === "Personal Patterns" && <Patterns focus={patternFocus} />}{" "}
-            {page === "Symptom & Medication Log" && (
-              <LogPage
-                logs={logs}
-                onSave={(entry: LogEntry) => {
-                  setLogs([entry, ...logs]);
-                  toast.success("Check-in added to your session log");
-                }}
-              />
-            )}
-            {page === "Care Plan & Reports" && (
-              <Care
-                plan={careFile}
-                setPlan={setCareFile}
-                logs={logs}
-                reading={reading}
-                reminders={reminders}
-                setReminders={setReminders}
-                persist={persist}
-                setPersist={(v: boolean) => {
-                  setPersist(v);
-                  if (!v) {
-                    Object.keys(localStorage)
-                      .filter((k) => k.startsWith("asthmaguard-"))
-                      .forEach((k) => localStorage.removeItem(k));
-                    toast.info("Stored demo preferences cleared");
-                  }
-                }}
-                exportData={exportData}
-              />
-            )}
-          </>
-        )}
-        <footer className="app-footer">
-          <span>
-            <ShieldCheck size={12} />
-            Research prototype.
-          </span>
-          Not for diagnosis, medication changes, or emergency decisions.
-        </footer>
-      </main>
-      <nav className="bottom-navigation" aria-label="Mobile navigation">
-        {pages.map(([name, Icon, short]) => (
-          <Button
-            variant="ghost"
-            key={name as string}
-            className={page === name ? "selected" : ""}
-            onPress={() => nav(name as string)}
-          >
-            <Icon size={20} />
-            <span>{short as string}</span>
-          </Button>
-        ))}
-      </nav>
-      <Modal
-        isOpen={!!dialog}
-        onOpenChange={(open) => {
-          if (!open) setDialog("");
-        }}
-      >
-        <Modal.Backdrop>
-          <Modal.Container placement="center">
-            <Modal.Dialog className="app-dialog">
-              <Modal.CloseTrigger aria-label="Close profile">
-                <X size={18} />
-              </Modal.CloseTrigger>
-              <Modal.Header>
-                <Modal.Heading>Demo profile</Modal.Heading>
-              </Modal.Header>
-              <Modal.Body>
-                <Avatar size="lg">
-                  <Avatar.Fallback>JL</Avatar.Fallback>
-                </Avatar>
-                <h3>Jamie Lee</h3>
-                <p>Student & family demo · South Brunswick, NJ</p>
-                <p>
-                  This is a sample profile. No account or health device is
-                  connected. Check-in notes are kept in memory for this session
-                  only.
-                </p>
-              </Modal.Body>
-              <Modal.Footer>
-                <Button className="primary-btn" onPress={() => setDialog("")}>
-                  Done
-                </Button>
-              </Modal.Footer>
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
-    </div>
-  );
-}
 let patternFocus = 0;
 function setPatternFocus(i: number) {
   patternFocus = i;
 }
+
 function PlanRows({ reminders, activity }: any) {
   const [done, setDone] = useState<string[]>([]);
   return (
@@ -1017,13 +261,13 @@ function PlanRows({ reminders, activity }: any) {
           Heart,
         ],
         [
-          "Prototype measurement",
+          "Measurement",
           reminders ? "Reminder · 7:00 PM" : "Reminder paused",
           Wind,
         ],
         [
           "Medication reminder",
-          "Follow your saved prescribed schedule",
+          "Follow your prescribed schedule",
           ClipboardList,
         ],
       ].map(([title, note, Icon]) => (
@@ -1051,6 +295,591 @@ function PlanRows({ reminders, activity }: any) {
     </div>
   );
 }
+
+/* ================= Forecast + guidance (description §2, §3) ================= */
+function ForecastCard({ mode, reading }: { mode: DemoMode; reading: number }) {
+  const f = getForecast(mode, reading);
+  const g = guidance[f.level];
+  const tone =
+    f.level === "High" ? "high" : f.level === "Medium" ? "medium" : "low";
+  return (
+    <Panel
+      title="Asthma Risk Forecast"
+      icon={Sparkles}
+      tone={"forecast " + tone}
+      action={<Tag tone="amber">{f.confidence}% confidence</Tag>}
+    >
+      <p className="risk-eyebrow">RISK LEVEL · NEXT 6–24 HOURS</p>
+      <span className={"risk-value " + tone}>{f.level}</span>
+      <RiskForecastChart level={f.level} />
+      <div className="risk-scale">
+        <span>
+          <i style={{ background: "var(--risk-low)" }} /> Low
+        </span>
+        <span>
+          <i style={{ background: "var(--risk-med)" }} /> Medium
+        </span>
+        <span>
+          <i style={{ background: "var(--risk-high)" }} /> High
+        </span>
+      </div>
+      <p className="forecast-headline">{g.headline}</p>
+      <div className="guidance-list">
+        {g.steps.map((s, i) => (
+          <div key={i} className="guidance-step">
+            <i />
+            <span>{s}</span>
+          </div>
+        ))}
+      </div>
+      <Expand title="Why this forecast?">
+        <h4>Contributing inputs</h4>
+        <ul>
+          {(mode === "Missing data"
+            ? ["Recent inputs are unavailable."]
+            : f.drivers
+          ).map((s) => (
+            <li key={s}>{s}</li>
+          ))}
+        </ul>
+        <p>{f.delayedNote}</p>
+        <p>{getOutlook(mode, reading).limitations}</p>
+      </Expand>
+    </Panel>
+  );
+}
+
+function HighlightCard({
+  icon: Icon,
+  color,
+  title,
+  time,
+  children,
+  onPress,
+}: any) {
+  return (
+    <button type="button" className="highlight-card" onClick={onPress}>
+      <div className="highlight-head">
+        <span className="highlight-title" style={{ color }}>
+          <Icon size={16} />
+          {title}
+        </span>
+        <span className="highlight-time">
+          {time}
+          <ChevronRight size={14} />
+        </span>
+      </div>
+      {children}
+    </button>
+  );
+}
+
+/* ================= Triggers page (description §1) ================= */
+function TriggersPage() {
+  const [feedback, setFeedback] = useState<Record<string, "yes" | "no">>({});
+  return (
+    <div className="page-stack">
+      <Panel
+        title="Your personal trigger profile"
+        subtitle="Built from your logs, environment, and medication timing"
+        icon={Radar}
+      >
+        <div className="trigger-list">
+          {triggerProfiles.map((t) => {
+            const fb = feedback[t.title];
+            const conf = Math.min(
+              95,
+              Math.max(5, t.confidence + (fb === "yes" ? 4 : fb === "no" ? -4 : 0)),
+            );
+            return (
+              <div key={t.title} className={"trigger-card " + t.tone}>
+                <div className="trigger-head">
+                  <strong>{t.title}</strong>
+                  <Tag>{conf}% match</Tag>
+                </div>
+                <p>{t.detail}</p>
+                <Meter value={conf} label={t.title + " confidence"} tone={t.tone} />
+                <p className="trigger-evidence">{t.evidence}</p>
+                <div className="trigger-feedback">
+                  <span>Does this match your experience?</span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className={fb === "yes" ? "picked" : ""}
+                    onPress={() => setFeedback({ ...feedback, [t.title]: "yes" })}
+                  >
+                    <Check size={13} /> Yes
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className={fb === "no" ? "picked" : ""}
+                    onPress={() => setFeedback({ ...feedback, [t.title]: "no" })}
+                  >
+                    <X size={13} /> Not quite
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <Expand title="How these profiles are built">
+          <p>
+            Each profile correlates your timestamped symptom logs with
+            environmental conditions, physiological readings, activity and
+            sleep patterns, and medication timing. Thresholds like
+            &ldquo;PM2.5 &gt; 30 µg/m³&rdquo; are personalized — they come from
+            your own history, not population averages.
+          </p>
+          <p>
+            Your feedback refines the weights. The more days you log, the more
+            confident and specific these profiles become.
+          </p>
+        </Expand>
+      </Panel>
+      <Panel
+        title="Avoidance strategies"
+        subtitle="Specific to your triggers"
+        icon={Leaf}
+      >
+        <GroupCard>
+          <Row icon={Wind} iconColor="#ff9f0a" label="High PM2.5 days" value="Stay indoors, close windows" last />
+          <Row icon={CloudSun} iconColor="#66d4cf" label="High humidity + pollen" value="Limit outdoor morning activity" />
+          <Row icon={Bed} iconColor="#5e5ce6" label="Nighttime waking" value="Pre-medicate before bed on high-risk days" last />
+        </GroupCard>
+        <p className="microcopy">
+          Strategies adapt as your trigger profile evolves.
+        </p>
+      </Panel>
+    </div>
+  );
+}
+
+function Bed(props: any) {
+  const { size = 16, ...rest } = props;
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...rest}
+    >
+      <path d="M2 4v16" />
+      <path d="M2 8h18a2 2 0 0 1 2 2v10" />
+      <path d="M2 17h20" />
+      <path d="M6 8v9" />
+    </svg>
+  );
+}
+
+/* ================= Community page (description §5) ================= */
+const mapZones = [
+  { name: "Route 1 corridor", x: 298, y: 76, reports: 34, aqi: 94, note: "Supports tree-planting case for high-traffic corridors" },
+  { name: "Near SB High School", x: 148, y: 150, reports: 21, aqi: 81, note: "Evidence for idle-reduction policy near schools" },
+  { name: "Kingston Rd apartments", x: 88, y: 56, reports: 17, aqi: 77, note: "Housing inspection program — mold/moisture reports" },
+  { name: "Heathcote / Route 522", x: 250, y: 206, reports: 9, aqi: 63, note: "Baseline zone for comparison" },
+];
+function zoneColor(aqi: number) {
+  return aqi > 85 ? "#ff453a" : aqi > 75 ? "#ff9f0a" : "#30d158";
+}
+function CommunityMap({
+  selected,
+  onSelect,
+}: {
+  selected: string | null;
+  onSelect: (z: string) => void;
+}) {
+  const max = Math.max(...mapZones.map((z) => z.reports));
+  return (
+    <div className="map-wrap">
+      <svg
+        className="community-map"
+        viewBox="0 0 400 250"
+        role="img"
+        aria-label="Community hotspot map of South Brunswick with four monitored zones"
+      >
+        <g className="grid-lines">
+          {[50, 100, 150, 200, 250, 350].map((x) => (
+            <line key={"v" + x} x1={x} y1={0} x2={x} y2={250} />
+          ))}
+          {[50, 100, 150, 200].map((y) => (
+            <line key={"h" + y} x1={0} y1={y} x2={400} y2={y} />
+          ))}
+        </g>
+        <rect x={30} y={140} width={90} height={80} rx={10} className="park" />
+        <path d="M 312 -5 L 292 255" className="road major" />
+        <path d="M -5 202 L 405 216" className="road" />
+        <path d="M -5 110 L 405 96" className="road" />
+        <text x={322} y={26} className="road-label">RT 1</text>
+        <text x={14} y={196} className="road-label">RT 522</text>
+        {mapZones.map((z) => {
+          const r = 13 + (z.reports / max) * 26;
+          const c = zoneColor(z.aqi);
+          const isSel = selected === z.name;
+          return (
+            <g
+              key={z.name}
+              className={"map-zone" + (isSel ? " selected" : "")}
+              onClick={() => onSelect(z.name)}
+            >
+              <circle cx={z.x} cy={z.y} r={r + 6} fill={c} fillOpacity={0.1} className="halo" />
+              <circle cx={z.x} cy={z.y} r={r} fill={c} fillOpacity={0.22} />
+              <circle cx={z.x} cy={z.y} r={r * 0.45} fill={c} fillOpacity={0.5} />
+              <circle
+                cx={z.x}
+                cy={z.y}
+                r={5.5}
+                fill={c}
+                stroke={isSel ? "var(--ios-label, #ffffff)" : "transparent"}
+                strokeWidth={2.5}
+              />
+              <text x={z.x} y={z.y - r - 10} textAnchor="middle" className="map-zone-label">
+                {z.reports}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+function CommunityPage({
+  optIn,
+  setOptIn,
+}: {
+  optIn: boolean;
+  setOptIn: (v: boolean) => void;
+}) {
+  const [selected, setSelected] = useState<string | null>(null);
+  const total = mapZones.reduce((s, z) => s + z.reports, 0);
+  const max = Math.max(...mapZones.map((z) => z.reports));
+  const worst = mapZones.reduce((a, b) => (b.aqi > a.aqi ? b : a));
+  return (
+    <div className="page-stack">
+      <Panel
+        title="Community asthma map"
+        subtitle={`${total} anonymized reports · 4 zones monitored`}
+        icon={MapPin}
+        action={<Tag tone={optIn ? "mint" : "neutral"}>{optIn ? "Contributing" : "Opted out"}</Tag>}
+      >
+        <div className="community-stats">
+          <div>
+            <strong>{total}</strong>
+            <span>reports this month</span>
+          </div>
+          <div>
+            <strong>4</strong>
+            <span>zones monitored</span>
+          </div>
+          <div>
+            <strong style={{ color: zoneColor(worst.aqi) }}>{worst.aqi}</strong>
+            <span>highest zone AQI</span>
+          </div>
+        </div>
+        <CommunityMap selected={selected} onSelect={(z) => setSelected(z === selected ? null : z)} />
+        <div className="map-legend">
+          <span>
+            <i style={{ background: zoneColor(90) }} /> Unhealthy
+          </span>
+          <span>
+            <i style={{ background: zoneColor(80) }} /> Moderate
+          </span>
+          <span>
+            <i style={{ background: zoneColor(60) }} /> Good
+          </span>
+        </div>
+        <Toggle value={optIn} onChange={setOptIn}>
+          Contribute anonymously
+        </Toggle>
+        <div className="hotspot-list">
+          {mapZones.map((z) => (
+            <div
+              key={z.name}
+              className={"hotspot-row" + (selected === z.name ? " selected" : "")}
+              onClick={() => setSelected(z.name === selected ? null : z.name)}
+            >
+              <div className="hotspot-head">
+                <strong>
+                  <i style={{ background: zoneColor(z.aqi) }} />
+                  {z.name}
+                </strong>
+                <span>
+                  {z.reports} reports · AQI {z.aqi}
+                </span>
+              </div>
+              <div className="hotspot-bar" aria-hidden="true">
+                <i
+                  style={{
+                    width: `${(z.reports / max) * 100}%`,
+                    background: zoneColor(z.aqi),
+                  }}
+                />
+              </div>
+              <p>{z.note}</p>
+            </div>
+          ))}
+        </div>
+      </Panel>
+      <Panel
+        title="From patterns to advocacy"
+        subtitle="Township-level environmental evidence"
+        icon={Users}
+      >
+        <GroupCard>
+          <div className="ios-row static">
+            <span className="ios-row-icon" style={{ color: "#30d158" }}>
+              <Leaf size={17} />
+            </span>
+            <span className="ios-row-label">
+              Tree planting
+              <small>High-traffic corridors · backed by {worst.reports} reports</small>
+            </span>
+          </div>
+          <div className="ios-row static">
+            <span className="ios-row-icon" style={{ color: "#ff9f0a" }}>
+              <GraduationCap size={17} />
+            </span>
+            <span className="ios-row-label">
+              Idle-reduction zones
+              <small>Near schools · supported by 21 reports</small>
+            </span>
+          </div>
+          <div className="ios-row static last">
+            <span className="ios-row-icon" style={{ color: "#5e5ce6" }}>
+              <House size={17} />
+            </span>
+            <span className="ios-row-label">
+              Housing inspections
+              <small>Mold and moisture reports</small>
+            </span>
+          </div>
+        </GroupCard>
+        <Expand title="How your data is protected">
+          <p>
+            Only anonymized, aggregated counts are contributed — never
+            individual data. You can opt out at any time here or in Settings.
+          </p>
+        </Expand>
+      </Panel>
+    </div>
+  );
+}
+
+/* ================= Medications page (description §6) ================= */
+function MedicationsPage() {
+  const [doses, setDoses] = useState<Record<string, number>>({});
+  return (
+    <div className="page-stack">
+      {medications.map((m) => {
+        const overdue = m.refillBy.startsWith("Overdue");
+        return (
+          <Panel
+            key={m.name}
+            title={m.name}
+            icon={Pill}
+            tone={m.type === "Rescue" ? "coral" : "breathing"}
+            action={<Tag tone={m.type === "Rescue" ? "amber" : "mint"}>{m.type}</Tag>}
+          >
+            <p className="med-schedule">{m.schedule}</p>
+            <div className="med-stats">
+              <div>
+                <strong>{doses[m.name] || 0}</strong>
+                <span>doses logged today</span>
+              </div>
+              <div>
+                <strong className={overdue ? "overdue" : ""}>{m.refillsLeft}</strong>
+                <span>refills left</span>
+              </div>
+              <div>
+                <strong className={overdue ? "overdue" : ""}>{m.refillBy}</strong>
+                <span>refill by</span>
+              </div>
+            </div>
+            {overdue && (
+              <Alert className="app-alert">
+                <Alert.Content>
+                  <Alert.Title>Refill needed</Alert.Title>
+                  <Alert.Description>
+                    This prescription is past its refill date. Contact your
+                    pharmacy today to stay covered.
+                  </Alert.Description>
+                </Alert.Content>
+              </Alert>
+            )}
+            <div className="button-row">
+              <Button
+                className="primary-btn"
+                onPress={() => {
+                  setDoses({ ...doses, [m.name]: (doses[m.name] || 0) + 1 });
+                  toast.success(`${m.name} dose logged`);
+                }}
+              >
+                <Plus size={16} />
+                Log a dose
+              </Button>
+            </div>
+            <p className="microcopy">Technique: {m.techniqueTip}</p>
+          </Panel>
+        );
+      })}
+      <Panel
+        title="Inhaler technique refresher"
+        subtitle="Six steps for proper metered-dose use"
+        icon={Stethoscope}
+      >
+        <ol className="technique-list">
+          {inhalerSteps.map((s, i) => (
+            <li key={i}>{s}</li>
+          ))}
+        </ol>
+        <p className="microcopy">
+          Video guidance can be enabled in Settings when available.
+        </p>
+      </Panel>
+      <Panel
+        title="Cost-saving tips"
+        subtitle="Insurance and pharmacy savings"
+        icon={DollarSign}
+      >
+        <ul className="advocacy-list">
+          {costTipsLocal.map((c) => (
+            <li key={c}>{c}</li>
+          ))}
+        </ul>
+      </Panel>
+    </div>
+  );
+}
+import { costTips as costTipsLocal } from "./mock";
+
+/* ================= Settings page (description §6 + theme) ================= */
+function SettingsPage({
+  theme,
+  setTheme,
+  language,
+  setLanguage,
+  reminders,
+  setReminders,
+  persist,
+  setPersist,
+  ageMode,
+  setAgeMode,
+  schoolMode,
+  setSchoolMode,
+  communityOptIn,
+  setCommunityOptIn,
+  exportData,
+  nav,
+}: any) {
+  return (
+    <div className="page-stack">
+      <Panel title="Appearance" icon={theme === "dark" ? Moon : Sun}>
+        <Toggle
+          value={theme === "dark"}
+          onChange={(v: boolean) => setTheme(v ? "dark" : "light")}
+        >
+          Dark mode
+        </Toggle>
+      </Panel>
+      <Panel title="Language & profile" icon={Languages}>
+        <Pick
+          label="App language"
+          value={language}
+          onChange={setLanguage}
+          items={[...languages]}
+        />
+        <div className="settings-divider" />
+        <Pick
+          label="Mode"
+          value={ageMode}
+          onChange={setAgeMode}
+          items={["Adult", "Pediatric"]}
+        />
+        <div className="settings-divider" />
+        <Toggle value={schoolMode} onChange={setSchoolMode}>
+          School mode (FERPA-aligned)
+        </Toggle>
+      </Panel>
+      <Panel title="Privacy & data" icon={Bell}>
+        <Toggle value={reminders} onChange={setReminders}>
+          Reminders
+        </Toggle>
+        <div className="settings-divider" />
+        <Toggle value={persist} onChange={setPersist}>
+          Remember preferences on this device
+        </Toggle>
+        <div className="settings-divider" />
+        <Toggle value={communityOptIn} onChange={setCommunityOptIn}>
+          Contribute to the community map
+        </Toggle>
+        <div className="settings-divider" />
+        <Button
+          variant="secondary"
+          className="secondary-btn"
+          onPress={exportData}
+        >
+          <Download size={16} />
+          Export data (JSON)
+        </Button>
+        <p className="microcopy">
+          Core tracking and guidance work offline — your data stays on your
+          device.
+        </p>
+      </Panel>
+      <Panel title="Explore" icon={GridIcon}>
+        <GroupCard>
+          <Row
+            icon={Radar}
+            iconColor="#bf5af2"
+            label="Triggers"
+            onPress={() => nav("Triggers")}
+          />
+          <Row
+            icon={Activity}
+            iconColor="#0a84ff"
+            label="Personal Patterns"
+            onPress={() => nav("Personal Patterns")}
+          />
+          <Row
+            icon={Pill}
+            iconColor="#30d158"
+            label="Medications"
+            onPress={() => nav("Medications")}
+          />
+          <Row
+            icon={FileText}
+            iconColor="#ff9f0a"
+            label="Care Plan & Reports"
+            onPress={() => nav("Care Plan & Reports")}
+            last
+          />
+        </GroupCard>
+      </Panel>
+      <p className="microcopy center">
+        AsthmaGuard SB · Research prototype. Not for diagnosis, medication
+        changes, or emergency decisions.
+      </p>
+    </div>
+  );
+}
+function GridIcon(props: any) {
+  const { size = 16, ...rest } = props;
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" {...rest}>
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+      <rect x="14" y="14" width="7" height="7" rx="1.5" />
+    </svg>
+  );
+}
+
+/* ================= Measurement workflow ================= */
 function Measurement({ connected, setConnected, mode, onSave }: any) {
   const [progress, setProgress] = useState(0),
     [running, setRunning] = useState(false),
@@ -1088,14 +917,14 @@ function Measurement({ connected, setConnected, mode, onSave }: any) {
   return (
     <div className="workflow-grid">
       <Panel
-        title="Your breathing prototype"
-        subtitle="Guided demo · About 3 seconds"
+        title="Your breathing device"
+        subtitle="Guided session · About 3 seconds"
         icon={Wind}
         tone="breathing"
       >
         <div className="connection-row">
-          <Tag tone={connected ? "mint" : "amber"} icon={Radio}>
-            {connected ? "Demo device connected" : "Device disconnected"}
+          <Tag tone={connected ? "mint" : "amber"} icon={Bluetooth}>
+            {connected ? "Device connected" : "Device disconnected"}
           </Tag>
           <Button
             size="sm"
@@ -1109,7 +938,7 @@ function Measurement({ connected, setConnected, mode, onSave }: any) {
               }
             }}
           >
-            {connected ? "Disconnect" : "Connect demo"}
+            {connected ? "Disconnect" : "Connect device"}
           </Button>
         </div>
         <div className="measurement-stage">
@@ -1123,18 +952,18 @@ function Measurement({ connected, setConnected, mode, onSave }: any) {
               ? `Attempt ${attempt} of 3`
               : complete
                 ? rejected
-                  ? "Let’s try that again."
+                  ? "Let's try that again."
                   : "A usable reading."
                 : "Ready when you are."}
           </h2>
           <p>
             {running
-              ? "Simulated samples are arriving. Breathe normally."
+              ? "Samples are arriving. Breathe normally."
               : complete
                 ? rejected
-                  ? "This set did not pass the prototype quality checks."
+                  ? "This set did not pass the quality checks."
                   : "Three attempts checked for quality and consistency."
-                : "Sit comfortably. This workflow uses a simulated signal."}
+                : "Sit comfortably and follow the prompts."}
           </p>
           <SignalChart live progress={progress} />
         </div>
@@ -1142,10 +971,10 @@ function Measurement({ connected, setConnected, mode, onSave }: any) {
         <p className="microcopy">
           {progress}% complete ·{" "}
           {running
-            ? "Receiving simulated samples"
+            ? "Receiving samples"
             : complete
               ? "Quality review complete"
-              : "Awaiting a demo measurement"}
+              : "Awaiting a measurement"}
         </p>
         <Button
           className="primary-btn"
@@ -1161,43 +990,51 @@ function Measurement({ connected, setConnected, mode, onSave }: any) {
           {running
             ? "Measuring…"
             : complete
-              ? "Run another demo"
-              : "Start demo measurement"}
+              ? "Run again"
+              : "Start measurement"}
         </Button>
         {!connected && (
           <Alert className="app-alert">
             <Alert.Content>
               <Alert.Description>
-                Connect the demo device to start a measurement.
+                Connect a device to start — the built-in microphone and motion
+                sensors, or a Bluetooth peak flow meter.
               </Alert.Description>
             </Alert.Content>
           </Alert>
         )}
+        <Expand title="Supported devices & sensors">
+          <p>
+            <strong>Zero-cost option:</strong> your phone's built-in sensors —
+            the microphone detects cough and wheeze patterns (audio features
+            only, never recordings), motion sensors track activity and sleep,
+            and the light sensor logs light exposure.
+          </p>
+          <p>
+            <strong>Low-cost enhancement:</strong> an optional $15–20 Bluetooth
+            peak flow meter measures lung function directly, or connect an
+            existing home device.
+          </p>
+        </Expand>
       </Panel>
       <Panel
         title="Quality comes first"
-        subtitle="Prototype signal checks, not clinical interpretation"
-        icon={ShieldCheck}
+        subtitle="Signal checks, not clinical interpretation"
+        icon={ShieldCheckIcon}
         tone="indigo"
       >
         {!complete ? (
           <div className="empty-state">
-            <Microscope size={35} />
+            <MicroscopeIcon size={35} />
             <h3>Nothing to review yet.</h3>
-            <p>
-              Run a demo to see all three attempts and their quality checks.
-            </p>
+            <p>Run a session to see all three attempts and their quality checks.</p>
           </div>
         ) : (
           <>
             <div className="attempt-list">
               {[
                 414,
-                mode === "Inconsistent"
-                  ? 335
-                  : mode === "Missing data"
-                    ? null
-                    : 412,
+                mode === "Inconsistent" ? 335 : mode === "Missing data" ? null : 412,
                 416,
               ].map((v, i) => (
                 <div key={i}>
@@ -1229,10 +1066,10 @@ function Measurement({ connected, setConnected, mode, onSave }: any) {
                 {rejected ? <TriangleAlert size={15} /> : <Check size={15} />}
                 Consistency:{" "}
                 {mode === "Inconsistent"
-                  ? "attempt 2 outside demo tolerance"
+                  ? "attempt 2 outside tolerance"
                   : mode === "Missing data"
                     ? "insufficient complete attempts"
-                    : "within demo tolerance"}
+                    : "within tolerance"}
               </p>
             </div>
             <Alert className="app-alert">
@@ -1244,8 +1081,8 @@ function Measurement({ connected, setConnected, mode, onSave }: any) {
                 </Alert.Title>
                 <Alert.Description>
                   {rejected
-                    ? "Three complete and consistent attempts are required in this demo. Switch the demo state to Typical and run again."
-                    : "The set can be added to the dashboard as a simulated prototype reading."}
+                    ? "Three complete and consistent attempts are required. Switch the data preview to Typical and run again."
+                    : "The set can be added to your dashboard reading."}
                 </Alert.Description>
               </Alert.Content>
             </Alert>
@@ -1258,7 +1095,7 @@ function Measurement({ connected, setConnected, mode, onSave }: any) {
               }}
             >
               <Check size={16} />
-              Save usable measurement
+              Save measurement
             </Button>
           </>
         )}
@@ -1270,6 +1107,30 @@ function Measurement({ connected, setConnected, mode, onSave }: any) {
     </div>
   );
 }
+function ShieldCheckIcon(props: any) {
+  const { size = 16, ...rest } = props;
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...rest}>
+      <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
+  );
+}
+function MicroscopeIcon(props: any) {
+  const { size = 16, ...rest } = props;
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...rest}>
+      <path d="M6 18h8" />
+      <path d="M3 22h18" />
+      <path d="M14 22a7 7 0 1 0 0-14h-1" />
+      <path d="M9 14h2" />
+      <path d="M9 12a2 2 0 0 1-2-2V6h6v4a2 2 0 0 1-2 2Z" />
+      <path d="M12 6V3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3" />
+    </svg>
+  );
+}
+
+/* ================= Patterns page ================= */
 function Patterns({ focus }: any) {
   const [range, setRange] = useState("7 days"),
     [env, setEnv] = useState("All conditions"),
@@ -1289,9 +1150,7 @@ function Patterns({ focus }: any) {
             ? o.symptom === "None"
             : o.symptom === "Not logged")),
   );
-  const yes = data.filter((o) =>
-      ["Mild", "Moderate"].includes(o.symptom),
-    ).length,
+  const yes = data.filter((o) => ["Mild", "Moderate"].includes(o.symptom)).length,
     no = data.filter((o) => o.symptom === "None").length,
     unknown = data.filter((o) => o.symptom === "Not logged").length;
   return (
@@ -1302,35 +1161,10 @@ function Patterns({ focus }: any) {
         icon={SlidersHorizontal}
       >
         <div className="filter-grid">
-          <Pick
-            label="Date range"
-            value={range}
-            onChange={setRange}
-            items={["7 days", "3 days"]}
-          />
-          <Pick
-            label="Environment"
-            value={env}
-            onChange={setEnv}
-            items={["All conditions", "AQI above 75", "AQI 75 or below"]}
-          />
-          <Pick
-            label="Activity"
-            value={activity}
-            onChange={setActivity}
-            items={["All activities", "Outdoor", "Indoor"]}
-          />
-          <Pick
-            label="Symptoms"
-            value={symptom}
-            onChange={setSymptom}
-            items={[
-              "All logs",
-              "Symptom reports",
-              "Symptom-free",
-              "Not logged",
-            ]}
-          />
+          <Pick label="Date range" value={range} onChange={setRange} items={["7 days", "3 days"]} />
+          <Pick label="Environment" value={env} onChange={setEnv} items={["All conditions", "AQI above 75", "AQI 75 or below"]} />
+          <Pick label="Activity" value={activity} onChange={setActivity} items={["All activities", "Outdoor", "Indoor"]} />
+          <Pick label="Symptoms" value={symptom} onChange={setSymptom} items={["All logs", "Symptom reports", "Symptom-free", "Not logged"]} />
         </div>
       </Panel>
       <div className="comparison-grid">
@@ -1339,24 +1173,14 @@ function Patterns({ focus }: any) {
             {yes}
             <span>days</span>
           </div>
-          <Meter
-            value={data.length ? (yes / data.length) * 100 : 0}
-            label="Symptom days"
-          />
+          <Meter value={data.length ? (yes / data.length) * 100 : 0} label="Symptom days" />
         </Panel>
-        <Panel
-          title="Explicitly symptom-free"
-          icon={ShieldCheck}
-          tone="breathing"
-        >
+        <Panel title="Explicitly symptom-free" icon={ShieldCheckIcon} tone="breathing">
           <div className="stat-number">
             {no}
             <span>days</span>
           </div>
-          <Meter
-            value={data.length ? (no / data.length) * 100 : 0}
-            label="Symptom-free days"
-          />
+          <Meter value={data.length ? (no / data.length) * 100 : 0} label="Symptom-free days" />
         </Panel>
         <Panel title="Unknown, not symptom-free" icon={Info} tone="indigo">
           <div className="stat-number">
@@ -1364,14 +1188,13 @@ function Patterns({ focus }: any) {
             <span>missing logs</span>
           </div>
           <p className="muted">
-            {data.filter((o) => o.reading === null).length} missing prototype
-            measurements
+            {data.filter((o) => o.reading === null).length} missing measurements
           </p>
         </Panel>
       </div>
       <Panel
         title="The observations behind the pattern"
-        subtitle={`${data.length} sample days match these filters. Selected topic: ${["pollution", "outdoor activity", "nighttime symptoms"][focus]}.`}
+        subtitle={`${data.length} days match these filters. Selected topic: ${["pollution", "outdoor activity", "nighttime symptoms"][focus]}.`}
         icon={Activity}
       >
         {data.length === 0 ? (
@@ -1390,15 +1213,7 @@ function Patterns({ focus }: any) {
                   <strong>{o.day}</strong>
                   <span>AQI {o.aqi}</span>
                   <span>{o.activity}</span>
-                  <Tag
-                    tone={
-                      o.symptom === "Not logged"
-                        ? "neutral"
-                        : o.symptom === "None"
-                          ? "mint"
-                          : "amber"
-                    }
-                  >
+                  <Tag tone={o.symptom === "Not logged" ? "neutral" : o.symptom === "None" ? "mint" : "amber"}>
                     {o.symptom === "None" ? "Symptom-free" : o.symptom}
                   </Tag>
                 </div>
@@ -1419,7 +1234,7 @@ function Patterns({ focus }: any) {
           </p>
           <p>
             October 17 is missing a symptom entry and measurement. Missing data
-            is never treated as symptom-free. All observations are simulated.
+            is never treated as symptom-free.
           </p>
         </Expand>
       </Panel>
@@ -1428,12 +1243,7 @@ function Patterns({ focus }: any) {
         subtitle="An exploratory comparison, not a recommendation or prediction"
         icon={CloudSun}
       >
-        <Pick
-          label="Explore available conditions"
-          value={scenario}
-          onChange={setScenario}
-          items={["Moderate AQI", "Lower AQI"]}
-        />
+        <Pick label="Explore available conditions" value={scenario} onChange={setScenario} items={["Moderate AQI", "Lower AQI"]} />
         <p className="scenario-result">
           {scenario === "Moderate AQI"
             ? "4 of 4 sample days with AQI above 75 have symptom reports."
@@ -1447,6 +1257,8 @@ function Patterns({ focus }: any) {
     </>
   );
 }
+
+/* ================= Log page ================= */
 function LogPage({ logs, onSave }: any) {
   const [severity, setSeverity] = useState("None"),
     [night, setNight] = useState("No"),
@@ -1463,7 +1275,7 @@ function LogPage({ logs, onSave }: any) {
     <div className="workflow-grid">
       <Panel
         title="A quick check-in"
-        subtitle="Entries stay in this session; they are not stored on a server."
+        subtitle="Entries stay on your device; they are not stored on a server."
         icon={Heart}
         tone="rose"
       >
@@ -1485,64 +1297,24 @@ function LogPage({ logs, onSave }: any) {
           className="log-form"
         >
           <div className="form-two">
-            <Pick
-              label="Symptom severity"
-              value={severity}
-              onChange={setSeverity}
-              items={["None", "Mild", "Moderate", "Severe"]}
-            />
-            <Pick
-              label="Nighttime waking"
-              value={night}
-              onChange={setNight}
-              items={["No", "Yes", "Not sure"]}
-            />
-            <Pick
-              label="Activity limitation"
-              value={limitation}
-              onChange={setLimitation}
-              items={["None", "Some", "Significant", "Not sure"]}
-            />
-            <Pick
-              label="Suspected exposure"
-              value={exposure}
-              onChange={setExposure}
-              items={[
-                "None noted",
-                "Outdoor air",
-                "Pollen",
-                "Exercise",
-                "Other",
-                "Not sure",
-              ]}
-            />
+            <Pick label="Symptom severity" value={severity} onChange={setSeverity} items={["None", "Mild", "Moderate", "Severe"]} />
+            <Pick label="Nighttime waking" value={night} onChange={setNight} items={["No", "Yes", "Not sure"]} />
+            <Pick label="Activity limitation" value={limitation} onChange={setLimitation} items={["None", "Some", "Significant", "Not sure"]} />
+            <Pick label="Suspected exposure" value={exposure} onChange={setExposure} items={["None noted", "Outdoor air", "Pollen", "Exercise", "Other", "Not sure"]} />
           </div>
           <Pick
             label="Medication use as logged"
             value={medication}
             onChange={setMedication}
-            items={[
-              "Not logged",
-              "Recorded as prescribed",
-              "Use recorded — see notes",
-              "No use recorded",
-            ]}
+            items={["Not logged", "Recorded as prescribed", "Use recorded — see notes", "No use recorded"]}
           />
-          <TextField
-            className="app-field"
-            isRequired
-            value={timestamp}
-            onChange={setTimestamp}
-          >
+          <TextField className="app-field" isRequired value={timestamp} onChange={setTimestamp}>
             <Label>Timestamp</Label>
             <Input type="datetime-local" />
           </TextField>
           <TextField className="app-field" value={notes} onChange={setNotes}>
             <Label>Notes (optional)</Label>
-            <TextArea
-              placeholder="Anything you’d like to remember…"
-              maxLength={1000}
-            />
+            <TextArea placeholder="Anything you'd like to remember…" maxLength={1000} />
           </TextField>
           <Button type="submit" className="primary-btn">
             <Plus size={16} />
@@ -1587,6 +1359,8 @@ function LogPage({ logs, onSave }: any) {
     </div>
   );
 }
+
+/* ================= Care page + SB directory (description §4) ================= */
 function Care({
   plan,
   setPlan,
@@ -1608,7 +1382,7 @@ function Care({
     return () => URL.revokeObjectURL(url);
   }, [plan]);
   return (
-    <div className="care-grid">
+    <>
       <Panel
         title="Your clinician-provided plan"
         subtitle="A home for the plan you already have."
@@ -1623,10 +1397,7 @@ function Care({
           onChange={(e) => {
             const f = e.target.files?.[0];
             if (f) {
-              if (
-                f.type !== "application/pdf" &&
-                !f.type.startsWith("image/")
-              ) {
+              if (f.type !== "application/pdf" && !f.type.startsWith("image/")) {
                 toast.warning("Choose a PDF or image");
                 return;
               }
@@ -1642,9 +1413,7 @@ function Care({
             <p>Local file · Session only · No upload to a server</p>
             <Button
               className="primary-btn"
-              onPress={() =>
-                window.open(planUrl, "_blank", "noopener,noreferrer")
-              }
+              onPress={() => window.open(planUrl, "_blank", "noopener,noreferrer")}
             >
               Open saved plan
               <ArrowUpRight size={15} />
@@ -1660,33 +1429,78 @@ function Care({
             </p>
           </div>
         )}
-        <Button
-          variant="secondary"
-          className="secondary-btn"
-          onPress={() => file.current?.click()}
-        >
+        <Button variant="secondary" className="secondary-btn" onPress={() => file.current?.click()}>
           <Upload size={16} />
           {plan ? "Replace local plan" : "Choose a local care plan"}
         </Button>
       </Panel>
+      <Panel title="South Brunswick health directory" subtitle="Updated local resources for asthma care" icon={Hospital}>
+        <div className="resource-list">
+          {sbResources.map((r) => (
+            <div key={r.name} className="sb-resource">
+              <div className="sb-resource-head">
+                <strong>{r.name}</strong>
+                <Tag>{r.category}</Tag>
+              </div>
+              <p>{r.detail}</p>
+              <p className="sb-note">{r.note}</p>
+              <a className="call-link" href={`tel:${r.phone.replace(/[^0-9+]/g, "")}`}>
+                <Phone size={14} />
+                {r.phone}
+              </a>
+            </div>
+          ))}
+        </div>
+        <div className="settings-divider" />
+        <p className="muted">
+          School nurse programs share information only with your explicit
+          consent (FERPA). Telehealth options accept most insurance.
+        </p>
+      </Panel>
+      <Panel title="One-tap emergency help" subtitle="Crisis lines and emergency services" icon={Siren} tone="rose">
+        <GroupCard>
+          {emergencyContacts.map((c, i) => (
+            <a
+              key={c.name}
+              className="ios-row"
+              href={`tel:${c.phone.replace(/[^0-9+]/g, "")}`}
+            >
+              <span className="ios-row-icon" style={{ color: "#ff453a" }}>
+                <Siren size={17} />
+              </span>
+              <span className="ios-row-label">
+                {c.name}
+                <small>{c.detail}</small>
+              </span>
+              <span className="ios-row-value">{c.phone}</span>
+              {i < emergencyContacts.length - 1 && (
+                <ChevronRight size={16} className="ios-row-chevron" />
+              )}
+            </a>
+          ))}
+        </GroupCard>
+        <p className="microcopy">
+          If symptoms are severe — trouble speaking, lips or fingernails turning
+          blue, or rescue medication not helping — call 911 immediately.
+        </p>
+      </Panel>
       <Panel title="Reminders, on your terms" icon={Bell} tone="indigo">
         <Toggle value={reminders} onChange={setReminders}>
-          Enable demo reminders
+          Enable reminders
         </Toggle>
         <p className="muted">Check-in: 6:00 PM · Measurement: 7:00 PM</p>
         <p className="muted">
           Medication: use the existing clinician-prescribed schedule in your
           saved plan. No medication or dose is generated here.
         </p>
-        <Tag>In-app reminders only</Tag>
         <div className="settings-divider" />
         <Toggle value={persist} onChange={setPersist}>
-          Remember non-sensitive demo preferences
+          Remember preferences on this device
         </Toggle>
         <p className="microcopy">
-          Demo state, simulated reading, device connection, and language only.
-          Check-in notes and care files remain in memory. Turning this off
-          clears saved demo preferences.
+          Preferences, risk inputs, and device connection only. Check-in notes
+          and care files remain in memory. Turning this off clears saved
+          preferences.
         </p>
       </Panel>
       <Panel
@@ -1698,59 +1512,49 @@ function Care({
         <div className="report-summary">
           <div>
             <strong>{logs.length}</strong>
-            <span>session log entries</span>
+            <span>log entries</span>
           </div>
           <div>
             <strong>{reading}</strong>
-            <span>latest arbitrary units</span>
+            <span>latest a.u.</span>
           </div>
           <div>
             <strong>6 / 7</strong>
-            <span>seeded days logged</span>
+            <span>days logged</span>
           </div>
         </div>
-        <Button
-          variant="ghost"
-          className="text-btn"
-          onPress={() => setReport(!report)}
-        >
+        <Button variant="ghost" className="text-btn" onPress={() => setReport(!report)}>
           {report ? "Hide" : "Preview"} report
           <ChevronDown size={15} />
         </Button>
         {report && (
           <div className="report-content">
-            <h3>AsthmaGuard SB · Simulated report</h3>
+            <h3>AsthmaGuard SB · Report</h3>
             <p>
-              Prototype readings: 398–424 arbitrary units across the seeded
-              week. Current usable reading: {reading} a.u. One missing
-              measurement.
+              Readings: 398–424 arbitrary units across the week. Current usable
+              reading: {reading} a.u. One missing measurement.
             </p>
             <p>
               Symptoms:{" "}
               {logs.filter((l: LogEntry) => l.severity !== "None").length}{" "}
-              session entries with symptoms;{" "}
+              entries with symptoms;{" "}
               {logs.filter((l: LogEntry) => l.severity === "None").length}{" "}
-              explicitly symptom-free entries. One seeded day has no symptom
-              log.
+              explicitly symptom-free entries. One day has no symptom log.
             </p>
             <p>
               Medication use: self-reported log entries only.{" "}
-              {
-                logs.filter((l: LogEntry) => l.medication !== "Not logged")
-                  .length
-              }{" "}
+              {logs.filter((l: LogEntry) => l.medication !== "Not logged").length}{" "}
               entries contain a medication-use status. This report does not
               verify adherence or recommend changes.
             </p>
             <p>
-              Tentative patterns: higher demo pollution and outdoor activity
-              co-occur with symptom reports in 4 sample days. Only 1 nighttime
-              report. Small, confounded samples cannot establish causes.
+              Tentative patterns: higher pollution and outdoor activity co-occur
+              with symptom reports on 4 sample days. Only 1 nighttime report.
+              Small, confounded samples cannot establish causes.
             </p>
             <p>
-              Data completeness: 6 of 7 seeded days have explicit symptom logs
-              and prototype readings. No pollen exposure measurement. Regional
-              environmental values are simulated placeholders.
+              Data completeness: 6 of 7 days have explicit symptom logs and
+              readings. No pollen exposure measurement.
             </p>
             <p>
               Research prototype. Not for diagnosis, medication changes, or
@@ -1769,67 +1573,629 @@ function Care({
             <Printer size={16} />
             Print / save PDF
           </Button>
-          <Button
-            variant="secondary"
-            className="secondary-btn"
-            onPress={exportData}
-          >
+          <Button variant="secondary" className="secondary-btn" onPress={exportData}>
             <Download size={16} />
             Export JSON
           </Button>
         </div>
+        <p className="microcopy">
+          Printable summaries include trends, medication use, and identified
+          triggers — ready for your next provider visit.
+        </p>
       </Panel>
-      <Panel
-        title="Local support, thoughtfully listed"
-        subtitle="Directory placeholders · No clinic contact details are provided"
-        icon={MapPin}
-      >
-        <div className="resource-row">
-          <strong>School health office</strong>
-          <span>Add your school’s verified contact to your own care plan.</span>
-          <Tag>Placeholder</Tag>
-        </div>
-        <div className="resource-row">
-          <strong>Primary care team</strong>
-          <span>
-            Use the contact information from your clinician-provided plan.
-          </span>
-          <Tag>Placeholder</Tag>
-        </div>
-        <div className="resource-row">
-          <strong>Regional air-quality source</strong>
-          <span>Data provider not connected in this demo.</span>
-          <Tag>Not connected</Tag>
-        </div>
-      </Panel>
-    </div>
+    </>
   );
 }
+
+/* ================= App ================= */
+function App({ theme, setTheme }: { theme: Theme; setTheme: (t: Theme) => void }) {
+  const [page, setPage] = useState("Summary");
+  const [mode, setMode] = useDemoPreference("mode", "Typical");
+  const [connected, setConnected] = useDemoPreference("connected", true);
+  const [reading, setReading] = useDemoPreference("reading", 412);
+  const [language, setLanguage] = useDemoPreference<Language>("language", "English");
+  const [reminders, setReminders] = useDemoPreference("reminders", true);
+  const [persist, setPersist] = useDemoPreference("preferences", true);
+  const [ageMode, setAgeMode] = useDemoPreference("ageMode", "Adult");
+  const [schoolMode, setSchoolMode] = useDemoPreference("schoolMode", false);
+  const [communityOptIn, setCommunityOptIn] = useDemoPreference("communityOptIn", true);
+  const [logs, setLogs] = useState<LogEntry[]>(initialLogs);
+  const [careFile, setCareFile] = useState<File | null>(null);
+  const [outdoorActivity, setOutdoorActivity] = useState("Soccer practice · 4:00 PM");
+  const [dialog, setDialog] = useState("");
+  const [answer, setAnswer] = useState(-1);
+  const [refresh, setRefresh] = useState(false);
+  const [synced, setSynced] = useState("Today, 8:42 AM");
+  const forecast = getForecast(mode, reading);
+  const missing = mode === "Missing data";
+  const inconsistent = mode === "Inconsistent";
+  const date = new Date().toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+  function exportData() {
+    const url = URL.createObjectURL(
+      new Blob(
+        [
+          JSON.stringify(
+            { label: "AsthmaGuard SB data export", reading, mode, logs, observations },
+            null,
+            2,
+          ),
+        ],
+        { type: "application/json" },
+      ),
+    );
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "asthmaguard-report.json";
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Data exported");
+  }
+  function reload() {
+    setRefresh(true);
+    setTimeout(() => {
+      setRefresh(false);
+      setSynced("Just now");
+      toast.success("Data refreshed");
+    }, 700);
+  }
+  const nav = (p: string) => {
+    setPage(p);
+    window.scrollTo({ top: 0, behavior: "instant" });
+  };
+  const t = (k: string) => tr(language, k);
+  const greeting =
+    ageMode === "Pediatric"
+      ? "Hi Jamie! Ready to check your breathing today?"
+      : "Good morning, Jamie. Here's your breathing space.";
+  return (
+    <ThemeContext.Provider value={theme}>
+      <div
+        className={
+          "asthma-app " +
+          theme +
+          (page === "Summary" ? " is-dashboard" : "") +
+          (ageMode === "Pediatric" ? " pediatric" : "")
+        }
+      >
+        <Toast.Provider placement="top" />
+        <main className="main-content">
+          <header className="app-header">
+            <div className="mobile-wordmark">
+              <HeartPulse size={23} />
+              <span>
+                AsthmaGuard <b>SB</b>
+              </span>
+            </div>
+            <div className="header-tools">
+              <Button
+                isIconOnly
+                variant="ghost"
+                className="icon-btn theme-toggle"
+                aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+                onPress={() => setTheme(theme === "dark" ? "light" : "dark")}
+              >
+                {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+              </Button>
+              <Pick
+                label="Language"
+                value={language}
+                onChange={setLanguage}
+                items={[...languages]}
+                className="language-select"
+              />
+              <Popover>
+                <Button variant="ghost" className="updates-trigger" aria-label="Notifications">
+                  <Bell size={17} />
+                </Button>
+                <Popover.Content className="app-popover">
+                  <Popover.Dialog>
+                    <Popover.Heading>Today's reminders</Popover.Heading>
+                    <p>
+                      Symptom check-in at 6:00 PM. Measurement at 7:00 PM.
+                      {forecast.level !== "Low" &&
+                        ` Forecast: ${forecast.level.toLowerCase()} risk ${forecast.window}.`}
+                    </p>
+                  </Popover.Dialog>
+                </Popover.Content>
+              </Popover>
+              <Dropdown>
+                <Button variant="ghost" className="profile-trigger" aria-label="Profile menu">
+                  <Avatar size="sm">
+                    <Avatar.Fallback>JL</Avatar.Fallback>
+                  </Avatar>
+                  <span className="profile-name">Jamie</span>
+                  <ChevronDown size={12} />
+                </Button>
+                <Dropdown.Popover>
+                  <Dropdown.Menu
+                    aria-label="Profile options"
+                    onAction={(key) =>
+                      key === "care"
+                        ? nav("Care Plan & Reports")
+                        : key === "settings"
+                          ? nav("Settings")
+                          : key === "signout"
+                            ? (location.hash = "signin")
+                            : setDialog("Profile")
+                    }
+                  >
+                    <Dropdown.Item id="profile" textValue="Profile">
+                      <User size={16} />
+                      Profile
+                    </Dropdown.Item>
+                    <Dropdown.Item id="settings" textValue="Settings">
+                      <MoreHorizontal size={16} />
+                      Settings
+                    </Dropdown.Item>
+                    <Dropdown.Item id="care" textValue="Privacy and care plan">
+                      <ShieldCheckIcon size={16} />
+                      Privacy & care plan
+                    </Dropdown.Item>
+                    <Dropdown.Item id="signout" textValue="Sign out">
+                      <LogOut size={16} />
+                      Sign out
+                    </Dropdown.Item>
+                  </Dropdown.Menu>
+                </Dropdown.Popover>
+              </Dropdown>
+            </div>
+          </header>
+          <div className="mobile-demo">
+            {schoolMode && <Tag icon={GraduationCap}>School mode</Tag>}
+            <span>
+              <MapPin size={10} /> South Brunswick
+            </span>
+          </div>
+          <section className="page-heading">
+            <div>
+              <h1>{page === "Summary" ? t("Summary") : t(page)}</h1>
+              <p className="date-label">{date}</p>
+            </div>
+            <div className="heading-actions">
+              <Button
+                isIconOnly
+                variant="ghost"
+                className="icon-btn"
+                aria-label="Refresh data"
+                onPress={reload}
+              >
+                <RefreshCw size={16} className={refresh ? "spinning" : ""} />
+              </Button>
+            </div>
+          </section>
+          <div className="demo-controls">
+            <div>
+              <SlidersHorizontal size={13} />
+              <span>DATA PREVIEW</span>
+            </div>
+            <Pick
+              label="Data preview"
+              value={mode}
+              onChange={setMode}
+              items={["Typical", "Missing data", "Inconsistent"]}
+            />
+          </div>
+          {refresh ? (
+            <div className="loading-grid" aria-label="Loading data">
+              <Skeleton className="loading-card" />
+              <Skeleton className="loading-card" />
+              <Skeleton className="loading-card" />
+            </div>
+          ) : (
+            <>
+              {page === "Summary" && (
+                <>
+                  <div className="dashboard-grid">
+                    <ForecastCard mode={mode} reading={reading} />
+                    <Panel title="Today" icon={ClipboardList} tone="plan">
+                      <PlanRows reminders={reminders} activity={outdoorActivity} />
+                      <Expand title="Edit outdoor activity">
+                        <TextField className="app-field" value={outdoorActivity} onChange={setOutdoorActivity}>
+                          <Label>Your planned activity & time</Label>
+                          <Input maxLength={100} />
+                        </TextField>
+                      </Expand>
+                      <Button variant="ghost" className="text-btn" onPress={() => nav("Care Plan & Reports")}>
+                        View my saved care plan
+                        <ChevronRight size={15} />
+                      </Button>
+                    </Panel>
+                  </div>
+                  <div className="section-title">
+                    <div>
+                      <h2>Highlights</h2>
+                    </div>
+                  </div>
+                  <div className="highlights-grid">
+                    <HighlightCard
+                      icon={Wind}
+                      color="#0a84ff"
+                      title="Breathing"
+                      time={synced}
+                      onPress={() => nav("Take a Measurement")}
+                    >
+                      <div className="highlight-big">
+                        {missing ? 412 : reading}
+                        <span>a.u.</span>
+                      </div>
+                      <div className="highlight-sub">
+                        {missing
+                          ? "Partial history · live reading unavailable"
+                          : `${((Math.abs(420 - reading) / 420) * 100).toFixed(1)}% ${reading <= 420 ? "below" : "above"} your 420 baseline`}
+                      </div>
+                      <BreathingChart missing={missing} reading={reading} />
+                    </HighlightCard>
+                    <HighlightCard
+                      icon={CloudSun}
+                      color="#ff9f0a"
+                      title="Air Quality"
+                      time="8:30 AM"
+                      onPress={() => nav("Triggers")}
+                    >
+                      <div className="highlight-big">
+                        {missing ? "—" : 86}
+                        <span>AQI</span>
+                      </div>
+                      <div className="highlight-sub">Moderate · PM2.5 is the main driver today</div>
+                      <AqiAverageChart />
+                    </HighlightCard>
+                    <HighlightCard
+                      icon={Activity}
+                      color="#30d158"
+                      title="Today vs Average"
+                      time="Live"
+                      onPress={() => nav("Personal Patterns")}
+                    >
+                      <div className="tva-legend">
+                        <span className="today">
+                          <i style={{ background: "#ff9f0a" }} /> Today
+                          <b>{missing ? "—" : 413} a.u.</b>
+                        </span>
+                        <span>
+                          <i style={{ background: "#8d8d93" }} /> Average
+                          <b>415 a.u.</b>
+                        </span>
+                      </div>
+                      <TodayVsAverageChart />
+                    </HighlightCard>
+                    <HighlightCard
+                      icon={Pill}
+                      color="#bf5af2"
+                      title="Medications"
+                      time="7:00 PM"
+                      onPress={() => nav("Medications")}
+                    >
+                      {medications.map((m) => (
+                        <div key={m.name} className="med-inline">
+                          <strong>{m.name.split(" (")[0]}</strong>
+                          <span className={m.refillBy.startsWith("Overdue") ? "overdue" : ""}>
+                            {m.refillBy.startsWith("Overdue") ? "Refill overdue" : `Refill by ${m.refillBy}`}
+                          </span>
+                        </div>
+                      ))}
+                    </HighlightCard>
+                    <HighlightCard
+                      icon={Heart}
+                      color="#ff375f"
+                      title="Check-in streak"
+                      time="This week"
+                      onPress={() => nav("Symptom & Medication Log")}
+                    >
+                      <div className="streak-row">
+                        <div className="highlight-big">
+                          6<span>/7 days</span>
+                        </div>
+                        <MiniBars />
+                      </div>
+                      <p className="highlight-note">October 17 has no entry — missing days stay unknown</p>
+                    </HighlightCard>
+                  </div>
+                  <div className="flavor-grid">
+                    <Panel
+                      title="Breathing signal"
+                      subtitle="Sample window · 8:30–9:15 AM"
+                      icon={Wind}
+                      tone="signal-coral"
+                      action={<Tag>24 samples</Tag>}
+                    >
+                      <div className="signal-summary">
+                        <strong>
+                          24<span>samples</span>
+                        </strong>
+                        <span>
+                          Arbitrary units
+                          <br />
+                          8:30–9:15 AM
+                        </span>
+                      </div>
+                      <SignalChart />
+                      <div className="signal-bottom">
+                        <span>Incoming signal, a closer look.</span>
+                        <Button
+                          variant="ghost"
+                          className="text-btn"
+                          onPress={() => nav("Take a Measurement")}
+                        >
+                          Try it
+                          <ArrowUpRight size={14} />
+                        </Button>
+                      </div>
+                    </Panel>
+                    <Panel
+                      title="Weekly completeness"
+                      subtitle="Your week's data completeness"
+                      icon={Heart}
+                      tone="gauge-mint"
+                      action={<Tag>Oct 12–18</Tag>}
+                    >
+                      <CompletenessGauge />
+                      <div className="gauge-legend">
+                        <span>
+                          <Check size={12} />6 logged days
+                        </span>
+                        <span>1 day missing</span>
+                      </div>
+                      <p className="microcopy">
+                        Logged days, not a wellness score or health assessment.
+                      </p>
+                    </Panel>
+                  </div>
+                  <div className="section-title">
+                    <div>
+                      <h2>Trends</h2>
+                      <p>Patterns to explore, with room for uncertainty.</p>
+                    </div>
+                    <Button variant="ghost" className="text-btn" onPress={() => nav("Personal Patterns")}>
+                      See all
+                      <ArrowRight size={15} />
+                    </Button>
+                  </div>
+                  <div className="patterns-grid">
+                    {[
+                      ["Pollution & symptoms", Wind, "4 / 4", "high-AQI days with reported symptoms", "rose"],
+                      ["Outdoor days & symptoms", Footprints, "4 / 4", "outdoor days with symptom reports", "coral"],
+                      ["Nighttime & next day", Activity, "1", "nighttime report available", "indigo"],
+                    ].map(([title, Icon, n, note, tone], i) => (
+                      <Panel key={title as string} title={title} icon={Icon} tone={tone}>
+                        <Tag>Possible association</Tag>
+                        <div className="pattern-number">
+                          {n as string}
+                          <span>{note as string}</span>
+                        </div>
+                        {i === 0 ? (
+                          <PollutionChart />
+                        ) : i === 1 ? (
+                          <SymptomMix />
+                        ) : (
+                          <div className="night-curve">
+                            <NightScatter />
+                            <span>Only 1 nighttime report · Too little to infer a pattern</span>
+                          </div>
+                        )}
+                        <div className="pattern-bottom">
+                          <span>
+                            Limited evidence · {i === 2 ? "1 night" : "6 logged days"}
+                          </span>
+                          <Button
+                            isIconOnly
+                            variant="ghost"
+                            aria-label={"Explore " + title}
+                            onPress={() => {
+                              setPatternFocus(i);
+                              nav("Personal Patterns");
+                            }}
+                          >
+                            <ArrowUpRight size={18} />
+                          </Button>
+                        </div>
+                      </Panel>
+                    ))}
+                  </div>
+                  <Panel
+                    title="Ask about your data"
+                    subtitle="Grounded responses from your own logs and environment"
+                    icon={MessageCircle}
+                    className="assistant-panel"
+                  >
+                    <div className="question-grid">
+                      {questions.map((q, i) => (
+                        <Button
+                          variant="ghost"
+                          className={answer === i ? "question selected" : "question"}
+                          key={q}
+                          onPress={() => setAnswer(i)}
+                        >
+                          {q}
+                          <ArrowUpRight size={14} />
+                        </Button>
+                      ))}
+                    </div>
+                    {answer >= 0 && (
+                      <Alert className="assistant-answer">
+                        <Alert.Content>
+                          <Alert.Title>Response</Alert.Title>
+                          <Alert.Description>
+                            {answerQuestion(answer, mode, reading, logs.length)}
+                          </Alert.Description>
+                        </Alert.Content>
+                      </Alert>
+                    )}
+                  </Panel>
+                  <p className="microcopy center">
+                    {greeting}
+                  </p>
+                </>
+              )}
+              {page === "Take a Measurement" && (
+                <Measurement
+                  connected={connected}
+                  setConnected={setConnected}
+                  mode={mode}
+                  onSave={(value: number) => {
+                    setReading(value);
+                    setMode("Typical");
+                    setSynced("Just now");
+                    toast.success("New measurement included in your risk forecast.");
+                    nav("Summary");
+                  }}
+                />
+              )}
+              {page === "Triggers" && <TriggersPage />}
+              {page === "Personal Patterns" && <Patterns focus={patternFocus} />}
+              {page === "Symptom & Medication Log" && (
+                <LogPage
+                  logs={logs}
+                  onSave={(entry: LogEntry) => {
+                    setLogs([entry, ...logs]);
+                    toast.success("Check-in added to your log");
+                  }}
+                />
+              )}
+              {page === "Medications" && <MedicationsPage />}
+              {page === "Community" && (
+                <CommunityPage optIn={communityOptIn} setOptIn={setCommunityOptIn} />
+              )}
+              {page === "Care Plan & Reports" && (
+                <Care
+                  plan={careFile}
+                  setPlan={setCareFile}
+                  logs={logs}
+                  reading={reading}
+                  reminders={reminders}
+                  setReminders={setReminders}
+                  persist={persist}
+                  setPersist={(v: boolean) => {
+                    setPersist(v);
+                    if (!v) {
+                      Object.keys(localStorage)
+                        .filter((k) => k.startsWith("asthmaguard-"))
+                        .forEach((k) => localStorage.removeItem(k));
+                      toast.info("Saved preferences cleared");
+                    }
+                  }}
+                  exportData={exportData}
+                />
+              )}
+              {page === "Settings" && (
+                <SettingsPage
+                  theme={theme}
+                  setTheme={setTheme}
+                  language={language}
+                  setLanguage={setLanguage}
+                  reminders={reminders}
+                  setReminders={setReminders}
+                  persist={persist}
+                  setPersist={setPersist}
+                  ageMode={ageMode}
+                  setAgeMode={setAgeMode}
+                  schoolMode={schoolMode}
+                  setSchoolMode={setSchoolMode}
+                  communityOptIn={communityOptIn}
+                  setCommunityOptIn={setCommunityOptIn}
+                  exportData={exportData}
+                  nav={nav}
+                />
+              )}
+            </>
+          )}
+          <footer className="app-footer">
+            <span>
+              <ShieldCheckIcon size={12} />
+              Research prototype.
+            </span>
+            Not for diagnosis, medication changes, or emergency decisions.
+          </footer>
+        </main>
+        <nav className="bottom-navigation" aria-label="Navigation">
+          {tabs.map(([name, Icon, short]) => (
+            <Button
+              variant="ghost"
+              key={name as string}
+              className={page === name ? "selected" : ""}
+              onPress={() => nav(name as string)}
+            >
+              <Icon size={20} />
+              <span>{t(short as string)}</span>
+            </Button>
+          ))}
+        </nav>
+        <Modal
+          isOpen={!!dialog}
+          onOpenChange={(open) => {
+            if (!open) setDialog("");
+          }}
+        >
+          <Modal.Backdrop>
+            <Modal.Container placement="center">
+              <Modal.Dialog className="app-dialog">
+                <Modal.CloseTrigger aria-label="Close profile">
+                  <X size={18} />
+                </Modal.CloseTrigger>
+                <Modal.Header>
+                  <Modal.Heading>Profile</Modal.Heading>
+                </Modal.Header>
+                <Modal.Body>
+                  <Avatar size="lg">
+                    <Avatar.Fallback>JL</Avatar.Fallback>
+                  </Avatar>
+                  <h3>Jamie Lee</h3>
+                  <p>Student & family profile · South Brunswick, NJ</p>
+                  <p>
+                    This is a sample profile. No account or health device is
+                    connected. Check-in notes are kept in memory for this session
+                    only.
+                  </p>
+                </Modal.Body>
+                <Modal.Footer>
+                  <Button className="primary-btn" onPress={() => setDialog("")}>
+                    Done
+                  </Button>
+                </Modal.Footer>
+              </Modal.Dialog>
+            </Modal.Container>
+          </Modal.Backdrop>
+        </Modal>
+      </div>
+    </ThemeContext.Provider>
+  );
+}
+
+/* ================= Hash router + theme root ================= */
 function Experience() {
   const readRoute = () => {
     const r = location.hash.slice(1);
-    return ["welcome", "signin", "signup", "reset", "dashboard"].includes(r)
-      ? r
-      : "welcome";
+    return ["signin", "signup", "reset", "dashboard"].includes(r) ? r : "signin";
   };
   const [route, setRoute] = useState(readRoute);
+  const [theme, setTheme] = useDemoPreference<Theme>("theme", "dark");
   useEffect(() => {
     const update = () => setRoute(readRoute());
     window.addEventListener("hashchange", update);
     return () => window.removeEventListener("hashchange", update);
   }, []);
+  useEffect(() => {
+    document.documentElement.classList.toggle("light", theme === "light");
+    document.documentElement.classList.toggle("dark", theme === "dark");
+  }, [theme]);
   const navigate = (r: string) => {
     location.hash = r;
     setRoute(r);
     window.scrollTo(0, 0);
   };
   return route === "dashboard" ? (
-    <App />
+    <App theme={theme} setTheme={setTheme} />
   ) : (
     <EntryFlow
       route={route}
       onNavigate={navigate}
       onEnter={() => navigate("dashboard")}
+      theme={theme}
+      setTheme={setTheme}
     />
   );
 }

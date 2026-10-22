@@ -1,0 +1,29 @@
+{
+  "name": "asthmaguard-sb",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:js": "node build.mjs",
+    "build:css": "tailwindcss -i style.css -o dist/app.css --minify",
+    "build": "npm run build:js && npm run build:css",
+    "serve": "python3 -m http.server 4321 --bind 127.0.0.1"
+  },
+  "dependencies": {
+    "@heroui/react": "^3.0.0",
+    "@react-three/drei": "^10.0.0",
+    "@react-three/fiber": "^9.0.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.545.0",
+    "motion": "^14.5.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "recharts": "^3.0.0",
+    "tailwind-merge": "^3.0.0",
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.0.0",
+    "esbuild": "^0.25.0",
+    "tailwindcss": "^4.0.0"
+  }
+}
