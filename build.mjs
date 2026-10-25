@@ -43,7 +43,7 @@ await build({
     __FIREBASE_APP_ID__: env("VITE_FIREBASE_APP_ID"),
     __WEB_PUSH_PUBLIC_KEY__: pushPublicKey,
     __GOOGLE_MAPS_API_KEY__: env("VITE_GOOGLE_MAPS_API_KEY"),
-    __AIRFLOW_URL__: airflowUrl === '""' ? JSON.stringify("http://192.168.4.27/airflow") : airflowUrl,
+    __AIRFLOW_URL__: airflowUrl === '""' ? JSON.stringify("http://192.168.4.36/airflow") : airflowUrl,
   },
 });
 try {

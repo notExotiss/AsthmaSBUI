@@ -1035,7 +1035,14 @@ function Measurement({ onSave, measurements, personalBestFlow, profile, onDelete
     const poll = async () => {
       controller = new AbortController();
       try {
-        const response = await fetch(endpoint, { cache: "no-store", signal: controller.signal });
+        const currentUser = auth?.currentUser;
+        if (!currentUser) throw new Error("Sign in to read the sensor.");
+        const idToken = await currentUser.getIdToken();
+        const response = await fetch(endpoint, {
+          cache: "no-store",
+          signal: controller.signal,
+          headers: { Authorization: `Bearer ${idToken}` },
+        });
         if (!response.ok) throw new Error(`Device returned HTTP ${response.status}`);
         const result = await response.json();
         if (![result.pressure_pa, result.air_velocity_ms, result.estimated_flow_lpm].every((v) => typeof v === "number" && Number.isFinite(v))) {

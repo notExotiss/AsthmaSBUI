@@ -6,7 +6,8 @@
   "build:js": "node build.mjs",
   "build:css": "tailwindcss -i style.css -o dist/app.css --minify",
   "build": "npm run build:js && npm run build:css",
-  "serve": "python3 -m http.server 4321 --bind 0.0.0.0 --directory dist"
+  "serve": "python3 -m http.server 4321 --bind 0.0.0.0 --directory dist",
+  "relay": "node relay/server.mjs"
 },
   "dependencies": {
     "@heroui/react": "^3.0.0",
