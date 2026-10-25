@@ -2430,7 +2430,7 @@ function Experience() {
     await addChatMessage(user.uid, { role: "assistant", content: answerText, time: new Date().toISOString() });
   };
   const clearChat = async () => { if (user) await clearChatHistory(user.uid); };
-  if (authLoading || (user && !userData && !accountError)) return <div className="auth-loading account-loading-screen" role="status" aria-label="Loading your account"><Wind className="account-loading-icon" size={76} strokeWidth={1.8} aria-hidden="true" /></div>;
+  if (authLoading || (user && !userData && !accountError)) return <div className="auth-loading account-loading-screen" role="status" aria-label="Loading your account"><img className="account-loading-icon" src="/icons/brand-lungs.png" alt="" aria-hidden="true" /></div>;
   if (user && accountError) return <div className="auth-loading">Could not load your account. Check your connection and reload.</div>;
   return user && userData ? (
     <App theme={theme} setTheme={setTheme} language={language} setLanguage={setLanguage} user={user} userData={userData} onSignOut={() => signOut(auth!)} onChatSend={sendChat} onChatReset={clearChat} />

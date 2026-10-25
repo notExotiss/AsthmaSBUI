@@ -689,8 +689,7 @@ html.light .entry-shell .theme-toggle {
   height: 28px;
   flex: 0 0 auto;
   object-fit: contain;
-  background: #fff;
-  border-radius: 6px;
+  background: transparent;
 }
 .mobile-wordmark .brand-logo {
   width: 26px;
@@ -6613,6 +6612,8 @@ html.light .reference-details-setting .entry-select {
   color: var(--ios-red, #ff453a);
 }
 .account-loading-icon {
+  width: 76px;
+  height: 76px;
   filter: drop-shadow(0 0 12px color-mix(in srgb, currentColor 30%, transparent));
   transform-origin: center;
   animation: wind-pulse 1.4s ease-in-out infinite;
