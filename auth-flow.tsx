@@ -14,7 +14,6 @@ import {
   Check,
   Eye,
   EyeOff,
-  HeartPulse,
   LockKeyhole,
   Mail,
   Moon,
@@ -123,7 +122,7 @@ export function EntryFlow({
       <div className={"entry-shell " + theme}>
         <header className="entry-header">
           <div className="entry-brand">
-            <HeartPulse size={22} />
+            <img className="brand-logo" src="/icons/brand-lungs.png" alt="" aria-hidden="true" />
             <span>
               AsthmaGuard <small>SB</small>
             </span>

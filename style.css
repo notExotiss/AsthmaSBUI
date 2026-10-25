@@ -683,6 +683,19 @@ html.light .entry-shell .theme-toggle {
   font-weight: 600;
   letter-spacing: -0.3px;
 }
+.brand-logo {
+  display: block;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 6px;
+}
+.mobile-wordmark .brand-logo {
+  width: 26px;
+  height: 26px;
+}
 .mobile-wordmark > svg {
   color: #ff375f;
 }

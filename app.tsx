@@ -42,7 +42,6 @@ import {
   Globe,
   GraduationCap,
   Heart,
-  HeartPulse,
   Hospital,
   House,
   Info,
@@ -1989,7 +1988,7 @@ function App({ theme, setTheme, language, setLanguage, user, userData, onSignOut
         <main className="main-content">
           <header className="app-header">
             <div className="mobile-wordmark">
-              <HeartPulse size={23} />
+              <img className="brand-logo" src="/icons/brand-lungs.png" alt="" aria-hidden="true" />
               <span>
                 AsthmaGuard <b>SB</b>
               </span>
