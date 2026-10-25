@@ -1,6 +1,9 @@
 import React from "react";
 import { Card } from "@heroui/react";
 import { ChevronRight } from "lucide-react";
+import { LanguageContext, TranslateTree } from "./i18n";
+import { useContext } from "react";
+import { tr } from "./mock";
 
 export function Panel({
   title,
@@ -17,13 +20,13 @@ export function Panel({
         <div className="panel-heading">
           <div className="panel-title">
             {Icon && <Icon size={18} />}
-            <Card.Title>{title}</Card.Title>
+            <Card.Title><TranslateTree>{title}</TranslateTree></Card.Title>
           </div>
           {action}
         </div>
-        {subtitle && <Card.Description>{subtitle}</Card.Description>}
+        {subtitle && <Card.Description><TranslateTree>{subtitle}</TranslateTree></Card.Description>}
       </Card.Header>
-      <Card.Content>{children}</Card.Content>
+      <Card.Content><TranslateTree>{children}</TranslateTree></Card.Content>
     </Card>
   );
 }
@@ -36,6 +39,7 @@ export function Row({
   onPress,
   last,
 }: any) {
+  const language = useContext(LanguageContext);
   return (
     <button
       type="button"
@@ -45,7 +49,7 @@ export function Row({
       <span className="ios-row-icon" style={{ color: iconColor }}>
         <Icon size={17} />
       </span>
-      <span className="ios-row-label">{label}</span>
+      <span className="ios-row-label">{tr(language, label)}</span>
       {value && <span className="ios-row-value">{value}</span>}
       <ChevronRight size={16} className="ios-row-chevron" />
     </button>

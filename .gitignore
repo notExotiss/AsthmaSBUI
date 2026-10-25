@@ -1,0 +1,9 @@
+.env
+.env.local
+.env.*.local
+/firebase-messaging-sw.js
+.firebase/
+node_modules/
+functions/node_modules/
+/graphify-out/
+/tmp/
