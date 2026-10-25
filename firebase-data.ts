@@ -261,6 +261,16 @@ export async function savePushToken(uid: string, token: string, timeZone: string
   }, { merge: true });
 }
 
+export async function savePushSubscription(uid: string, subscription: PushSubscriptionJSON, timeZone: string) {
+  if (!subscription.endpoint) throw new Error("The browser did not return a push endpoint.");
+  const subscriptionId = subscription.endpoint.replace(/[/.#?\[\]]/g, "_");
+  await setDoc(doc(requireDb(), "users", uid, "pushSubscriptions", subscriptionId), {
+    subscription,
+    timeZone,
+    updatedAt: new Date().toISOString(),
+  }, { merge: true });
+}
+
 export async function saveProfile(uid: string, patch: Partial<UserProfile>) {
   await setDoc(privateDoc(uid, "profile"), patch, { merge: true });
 }

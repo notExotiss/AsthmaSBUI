@@ -94,8 +94,8 @@ import { Panel, Row, GroupCard } from "./ui";
 import { ThemeContext, type Theme } from "./theme";
 import { LanguageContext, languageLocale, TranslateTree } from "./i18n";
 import { onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, signInWithPopup, GoogleAuthProvider, signOut, updateProfile, type User as FirebaseUser } from "firebase/auth";
-import { addChatMessage, addMeasurement, addMedication, addSymptomLog, clearChatHistory, ensureUserData, recordDose, removeMeasurement, removeMedication, saveProfile, savePushToken, saveSettings, subscribeUserData, uploadCarePlan, getCarePlanUrl, removeCarePlan, seedSampleMeasurements, seedHistoricalRiskReadings, seedRiskForecastCheckins, seedMayoCodesMedications, type UserData, type UserProfile } from "./firebase-data";
-import { askGemini, auth, copyPresentationAccountData, firebaseConfigured, listenForPushNotifications, registerForPushNotifications, sendAccountTestNotification } from "./firebase";
+import { addChatMessage, addMeasurement, addMedication, addSymptomLog, clearChatHistory, ensureUserData, recordDose, removeMeasurement, removeMedication, saveProfile, savePushSubscription, saveSettings, subscribeUserData, uploadCarePlan, getCarePlanUrl, removeCarePlan, seedSampleMeasurements, seedHistoricalRiskReadings, seedRiskForecastCheckins, seedMayoCodesMedications, type UserData, type UserProfile } from "./firebase-data";
+import { askGemini, auth, copyPresentationAccountData, firebaseConfigured, registerForPushNotifications, sendAccountTestNotification } from "./firebase";
 import { ChatAssistant } from "./components/chat-assistant";
 import type { Message } from "./components/chat-assistant";
 import { buildRiskTrend, environmentAttribution, getCurrentEnvironment, useEnvironmentData, type EnvironmentPoint } from "./environment";
@@ -112,7 +112,7 @@ const pages = [
   ["Settings", MoreHorizontal, "More"],
 ];
 declare const __GOOGLE_MAPS_API_KEY__: string;
-declare const __FIREBASE_VAPID_KEY__: string;
+declare const __WEB_PUSH_PUBLIC_KEY__: string;
 const tabs = [
   ["Summary", House, "Summary"],
   ["Take a Measurement", Wind, "Measure"],
@@ -955,7 +955,7 @@ function NotificationPage({ onTestNotification, onEnableNotifications }: any) {
   ];
   return <div className="page-stack">
     <Panel title="Test notifications" subtitle="Send a reminder to enabled devices on this account." icon={Bell}>
-      <p className="microcopy">Enable notifications once on your phone and computer. Tests sent from either device will reach the account’s enabled devices.</p>
+      <p className="microcopy">On iPhone, open AsthmaGuard from its Home Screen icon, then enable notifications here. Each device must be enabled once.</p>
       <Button className="secondary-btn" onPress={onEnableNotifications}>Enable on this device</Button>
       <div className="notification-test-list">
         {examples.map(({ icon: Icon, label, title, body, page }) => (
@@ -1825,81 +1825,64 @@ function App({ theme, setTheme, language, setLanguage, user, userData, onSignOut
   };
   const onTestNotification = async (title: string, body: string, destination: string) => {
     try {
-      if (typeof Notification !== "undefined") {
-        let permission = Notification.permission;
-        if (permission === "default") permission = await Notification.requestPermission();
-        if (permission === "granted") {
-          try {
-            const token = await registerForPushNotifications(__FIREBASE_VAPID_KEY__);
-            if (token) {
-              const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York";
-              await savePushToken(user.uid, token, timeZone);
-              setPushReady(true);
-            }
-          } catch (error) {
-            console.warn("This device could not be registered for notifications.", error);
-          }
-        }
-      }
       const result = await sendAccountTestNotification(title, body, destination);
       if (result.sent > 0) toast.success(`Sent to ${result.sent} of ${result.devices} enabled devices.`);
-      else toast.info("No account devices are enabled for notifications yet.");
-    } catch {
+      else if (!pushReady) toast.info("Enable notifications on this device first.");
+      else toast.warning("No enabled device received the notification. Check notification settings on your phone.");
+    } catch (error) {
+      console.error("Account notification could not be sent.", error);
       toast.warning("Could not send the account notification. Check the connection and device permissions.");
     }
   };
   const enablePushOnThisDevice = async () => {
-    if (typeof Notification === "undefined") {
-      toast.warning("This browser does not support notifications.");
+    const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const isHomeScreenApp = window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+    if (isIOS && !isHomeScreenApp) {
+      toast.info("Open AsthmaGuard from the Home Screen app to enable iPhone notifications.");
       return;
     }
-    let permission = Notification.permission;
-    if (permission === "default") permission = await Notification.requestPermission();
+    if (typeof Notification === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+      toast.warning("Push notifications are not supported by this browser.");
+      return;
+    }
+    const permission = Notification.permission === "default" ? await Notification.requestPermission() : Notification.permission;
     if (permission !== "granted") {
       toast.info(permission === "denied" ? "Notifications are blocked in browser settings." : "Allow notifications to enable this device.");
       return;
     }
     try {
-      const token = await registerForPushNotifications(__FIREBASE_VAPID_KEY__);
-      if (!token) throw new Error("Push notifications are unavailable.");
+      if (!__WEB_PUSH_PUBLIC_KEY__) throw new Error("Push notification keys are missing.");
+      const subscription = await registerForPushNotifications(__WEB_PUSH_PUBLIC_KEY__, true);
+      if (!subscription) throw new Error("Push subscription is unavailable.");
       const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York";
-      await savePushToken(user.uid, token, timeZone);
+      await savePushSubscription(user.uid, subscription, timeZone);
       setPushReady(true);
       toast.success("This device can receive account notifications.");
-    } catch {
-      toast.warning("Could not enable notifications on this device.");
+    } catch (error) {
+      console.error("This device could not be registered for push notifications.", error);
+      toast.warning("Could not enable notifications. Check that this is the installed Home Screen app and try again.");
     }
   };
   useEffect(() => {
-    if (!settingsHydrated || !__FIREBASE_VAPID_KEY__ || typeof Notification === "undefined" || Notification.permission !== "granted") { setPushReady(false); return; }
+    if (!("serviceWorker" in navigator)) return;
+    void navigator.serviceWorker.register("/service-worker.js", { scope: "/" }).catch((error) => {
+      console.warn("The notification service worker could not be installed.", error);
+    });
+  }, []);
+  useEffect(() => {
+    if (!settingsHydrated || !__WEB_PUSH_PUBLIC_KEY__ || typeof Notification === "undefined" || Notification.permission !== "granted") { setPushReady(false); return; }
     let active = true;
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York";
-    void registerForPushNotifications(__FIREBASE_VAPID_KEY__)
-      .then(async (token) => {
-        if (token && active) {
-          await savePushToken(user.uid, token, timeZone);
+    void registerForPushNotifications(__WEB_PUSH_PUBLIC_KEY__)
+      .then(async (subscription) => {
+        if (subscription && active) {
+          await savePushSubscription(user.uid, subscription, timeZone);
           if (active) setPushReady(true);
         }
       })
       .catch(() => { if (active) { setPushReady(false); toast.warning(tr(language, "Push reminders could not be enabled on this device.")); } });
     return () => { active = false; };
   }, [settingsHydrated, user.uid]);
-  useEffect(() => {
-    if (!settingsHydrated || !__FIREBASE_VAPID_KEY__ || !pushReady) return;
-    let stop: (() => void) | undefined;
-    let active = true;
-    void listenForPushNotifications((payload) => {
-      const data = payload.data || {};
-      if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-        void navigator.serviceWorker?.ready.then((registration) => registration.showNotification(data.title || "AsthmaGuard", {
-          body: data.body || tr(language, "You have a reminder."),
-          tag: `asthmaguard-${data.page || "reminder"}`,
-          data: { page: data.page || "Symptom & Medication Log" },
-        }));
-      }
-    }).then((unsubscribe) => { if (active) stop = unsubscribe; else unsubscribe(); });
-    return () => { active = false; stop?.(); };
-  }, [settingsHydrated, language, pushReady]);
   useEffect(() => {
     const handlePushClick = (event: MessageEvent) => {
       if (event.data?.type !== "OPEN_REMINDER") return;

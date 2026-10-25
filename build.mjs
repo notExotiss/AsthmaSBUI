@@ -12,21 +12,21 @@ for (const file of [".env", ".env.local"]) {
   } catch {}
 }
 const env = (name) => JSON.stringify(process.env[name] || values[name] || "");
-const config = {
-  apiKey: JSON.parse(env("VITE_FIREBASE_API_KEY")),
-  authDomain: JSON.parse(env("VITE_FIREBASE_AUTH_DOMAIN")),
-  projectId: JSON.parse(env("VITE_FIREBASE_PROJECT_ID")),
-  storageBucket: JSON.parse(env("VITE_FIREBASE_STORAGE_BUCKET")),
-  messagingSenderId: JSON.parse(env("VITE_FIREBASE_MESSAGING_SENDER_ID")),
-  appId: JSON.parse(env("VITE_FIREBASE_APP_ID")),
-};
 const airflowUrl = env("VITE_AIRFLOW_URL");
+const functionsSource = await readFile("functions/index.js", "utf8");
+const backendPushKey = functionsSource.match(/const webPushVapidPublicKey = "([^"]+)";/)?.[1] || "";
+const pushPublicKey = env("VITE_WEB_PUSH_PUBLIC_KEY") === '""'
+  ? JSON.stringify(backendPushKey)
+  : env("VITE_WEB_PUSH_PUBLIC_KEY");
 const html = await readFile("index.html", "utf8");
 await writeFile("dist/index.html", html.replaceAll("./dist/app.css", "./app.css").replaceAll("./dist/app.js", "./app.js"), "utf8");
 await mkdir("dist/notification", { recursive: true });
 await writeFile("dist/notification/index.html", html.replaceAll("./fonts.css", "../fonts.css").replaceAll("./dist/app.css", "../app.css").replaceAll("./dist/app.js", "../app.js"), "utf8");
 await copyFile("fonts.css", "dist/fonts.css");
 await cp("fonts", "dist/fonts", { recursive: true, force: true });
+await copyFile("manifest.webmanifest", "dist/manifest.webmanifest");
+await copyFile("service-worker.js", "dist/service-worker.js");
+await cp("icons", "dist/icons", { recursive: true, force: true });
 await build({
   entryPoints: ["app.tsx"],
   bundle: true,
@@ -41,17 +41,11 @@ await build({
     __FIREBASE_STORAGE_BUCKET__: env("VITE_FIREBASE_STORAGE_BUCKET"),
     __FIREBASE_MESSAGING_SENDER_ID__: env("VITE_FIREBASE_MESSAGING_SENDER_ID"),
     __FIREBASE_APP_ID__: env("VITE_FIREBASE_APP_ID"),
-    __FIREBASE_VAPID_KEY__: env("VITE_FIREBASE_VAPID_KEY"),
+    __WEB_PUSH_PUBLIC_KEY__: pushPublicKey,
     __GOOGLE_MAPS_API_KEY__: env("VITE_GOOGLE_MAPS_API_KEY"),
     __AIRFLOW_URL__: airflowUrl === '""' ? JSON.stringify("http://192.168.4.27/airflow") : airflowUrl,
   },
 });
-try {
-  const template = await readFile("firebase-messaging-sw.template.js", "utf8");
-  const worker = template.replace("__FIREBASE_CONFIG__", JSON.stringify(config));
-  await writeFile("firebase-messaging-sw.js", worker, "utf8");
-  await writeFile("dist/firebase-messaging-sw.js", worker, "utf8");
-} catch {}
 try {
   await copyFile("output/pdf/sample-care-plan.pdf", "dist/sample-care-plan.pdf");
 } catch {}

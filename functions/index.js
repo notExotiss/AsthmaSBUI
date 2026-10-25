@@ -6,10 +6,13 @@ const { getFirestore } = require("firebase-admin/firestore");
 const { getMessaging } = require("firebase-admin/messaging");
 const { getStorage } = require("firebase-admin/storage");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
+const webPush = require("web-push");
 
 initializeApp();
 const db = getFirestore();
 const geminiKey = defineSecret("GEMINI_API_KEY");
+const webPushPrivateKey = defineSecret("WEB_PUSH_PRIVATE_KEY");
+const webPushVapidPublicKey = "BIoqpFpjG9F8G2y8X2PevJ5Yt6CyN84mC7OCOFoAW-tyTqkDqp2KJHTrZ8NfLluVX7mxi7JIiGVsqMUWNi0D-5E";
 
 function remapCopiedValue(value, sourceUid, targetUid, sourcePrefix, targetPrefix) {
   if (typeof value === "string") {
@@ -60,7 +63,7 @@ exports.copyPresentationAccountData = onCall({ region: "us-central1", timeoutSec
     for (const collection of collections) {
       // Push registrations identify a particular browser/device installation and
       // must remain attached only to the account that registered them.
-      if (collection.id === "pushTokens") continue;
+      if (collection.id === "pushTokens" || collection.id === "pushSubscriptions") continue;
       const snapshot = await collection.get();
       for (let start = 0; start < snapshot.docs.length; start += 450) {
         const batch = db.batch();
@@ -132,7 +135,48 @@ function localClock(timeZone, date) {
   };
 }
 
-exports.sendScheduledReminders = onSchedule({ schedule: "every 5 minutes", timeZone: "UTC", timeoutSeconds: 120 }, async () => {
+async function sendUserPushNotifications(userDoc, message) {
+  webPush.setVapidDetails("mailto:twoawesome9@gmail.com", webPushVapidPublicKey, webPushPrivateKey.value());
+  const [tokenSnapshot, subscriptionSnapshot] = await Promise.all([
+    userDoc.collection("pushTokens").get(),
+    userDoc.collection("pushSubscriptions").get(),
+  ]);
+  const tokenDocs = tokenSnapshot.docs.filter((tokenDoc) => typeof tokenDoc.data().token === "string");
+  const subscriptions = subscriptionSnapshot.docs.filter((doc) => doc.data().subscription?.endpoint);
+  let sent = 0;
+  const invalidRefs = [];
+  for (const subscriptionDoc of subscriptions) {
+    try {
+      await webPush.sendNotification(subscriptionDoc.data().subscription, JSON.stringify(message), {
+        TTL: 86400,
+        urgency: "normal",
+      });
+      sent += 1;
+    } catch (error) {
+      if (error.statusCode === 404 || error.statusCode === 410) invalidRefs.push(subscriptionDoc.ref);
+      else console.warn("Web push delivery failed", error.statusCode || "unknown");
+    }
+  }
+  for (let start = 0; start < tokenDocs.length; start += 500) {
+    const batch = tokenDocs.slice(start, start + 500);
+    const response = await getMessaging().sendEachForMulticast({
+      tokens: batch.map((tokenDoc) => tokenDoc.data().token),
+      data: { title: message.title, body: message.body, page: message.page },
+      webpush: { headers: { TTL: "86400" } },
+    });
+    sent += response.successCount;
+    response.responses.forEach((result, index) => {
+      const code = result.error?.code || "";
+      if (["messaging/registration-token-not-registered", "messaging/invalid-registration-token"].includes(code)) {
+        invalidRefs.push(batch[index].ref);
+      }
+    });
+  }
+  await Promise.all(invalidRefs.map((ref) => ref.delete()));
+  return { devices: subscriptions.length + tokenDocs.length, sent };
+}
+
+exports.sendScheduledReminders = onSchedule({ schedule: "every 5 minutes", timeZone: "UTC", timeoutSeconds: 120, secrets: [webPushPrivateKey] }, async () => {
   const settings = await db.collectionGroup("private").where("reminders", "==", true).get();
   const now = new Date();
   for (const settingsDoc of settings.docs) {
@@ -149,32 +193,19 @@ exports.sendScheduledReminders = onSchedule({ schedule: "every 5 minutes", timeZ
       { key: "measurement", field: "measurementDate", minute: 19 * 60, page: "measurement" },
     ].filter((item) => clock.minute >= item.minute && clock.minute < item.minute + 60);
     if (!due.length) continue;
-    const tokensSnapshot = await userDoc.collection("pushTokens").get();
-    const tokenDocs = tokensSnapshot.docs.filter((tokenDoc) => typeof tokenDoc.data().token === "string");
-    if (!tokenDocs.length) continue;
+    const [tokensSnapshot, subscriptionsSnapshot] = await Promise.all([
+      userDoc.collection("pushTokens").get(), userDoc.collection("pushSubscriptions").get(),
+    ]);
+    const hasTokens = tokensSnapshot.docs.some((tokenDoc) => typeof tokenDoc.data().token === "string");
+    const hasSubscriptions = subscriptionsSnapshot.docs.some((doc) => doc.data().subscription?.endpoint);
+    if (!hasTokens && !hasSubscriptions) continue;
     const stateRef = userDoc.collection("private").doc("reminderState");
     const state = (await stateRef.get()).data() || {};
     for (const reminder of due) {
       if (state[reminder.field] === clock.day) continue;
       const [title, body] = reminderCopy[language][reminder.key === "check-in" ? "checkin" : "measurement"];
-      let delivered = false;
-      for (let start = 0; start < tokenDocs.length; start += 500) {
-        const batch = tokenDocs.slice(start, start + 500);
-        const response = await getMessaging().sendEachForMulticast({
-          tokens: batch.map((tokenDoc) => tokenDoc.data().token),
-          data: { title, body, page: reminder.page },
-          // Let the registered app's service worker open its own origin. This keeps
-          // local reminders on localhost instead of redirecting to hosted UI.
-          webpush: { headers: { TTL: "86400" } },
-        });
-        if (response.successCount > 0) delivered = true;
-        const invalid = response.responses.flatMap((result, index) => {
-          const code = result.error?.code || "";
-          return ["messaging/registration-token-not-registered", "messaging/invalid-registration-token"].includes(code) ? [batch[index].ref] : [];
-        });
-        await Promise.all(invalid.map((ref) => ref.delete()));
-      }
-      if (delivered) {
+      const result = await sendUserPushNotifications(userDoc, { title, body, page: reminder.page });
+      if (result.sent > 0) {
         await stateRef.set({ [reminder.field]: clock.day, updatedAt: now.toISOString() }, { merge: true });
         state[reminder.field] = clock.day;
       }
@@ -182,7 +213,7 @@ exports.sendScheduledReminders = onSchedule({ schedule: "every 5 minutes", timeZ
   }
 });
 
-exports.sendTestNotification = onCall({ region: "us-central1", timeoutSeconds: 30 }, async (request) => {
+exports.sendTestNotification = onCall({ region: "us-central1", timeoutSeconds: 30, secrets: [webPushPrivateKey] }, async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Sign in to send a test notification.");
   const title = String(request.data?.title || "").trim();
   const body = String(request.data?.body || "").trim();
@@ -193,31 +224,7 @@ exports.sendTestNotification = onCall({ region: "us-central1", timeoutSeconds: 3
   }
 
   const userDoc = db.collection("users").doc(request.auth.uid);
-  const tokensSnapshot = await userDoc.collection("pushTokens").get();
-  const tokenDocs = tokensSnapshot.docs.filter((tokenDoc) => typeof tokenDoc.data().token === "string");
-  const uniqueTokens = new Map(tokenDocs.map((tokenDoc) => [tokenDoc.data().token, tokenDoc]));
-  const devices = [...uniqueTokens.values()];
-  if (!devices.length) return { devices: 0, sent: 0 };
-
-  let sent = 0;
-  const invalidRefs = [];
-  for (let start = 0; start < devices.length; start += 500) {
-    const batch = devices.slice(start, start + 500);
-    const response = await getMessaging().sendEachForMulticast({
-      tokens: batch.map((tokenDoc) => tokenDoc.data().token),
-      data: { title, body, page },
-      webpush: { headers: { TTL: "86400" } },
-    });
-    sent += response.successCount;
-    response.responses.forEach((result, index) => {
-      const code = result.error?.code || "";
-      if (["messaging/registration-token-not-registered", "messaging/invalid-registration-token"].includes(code)) {
-        invalidRefs.push(batch[index].ref);
-      }
-    });
-  }
-  await Promise.all(invalidRefs.map((ref) => ref.delete()));
-  return { devices: devices.length, sent };
+  return sendUserPushNotifications(userDoc, { title, body, page });
 });
 
 exports.askAboutRecords = onCall({ region: "us-central1", secrets: [geminiKey], timeoutSeconds: 60 }, async (request) => {
