@@ -2031,7 +2031,9 @@ function App({ theme, setTheme, language, setLanguage, user, userData, onSignOut
                   <Dropdown.Menu
                     aria-label="Profile options"
                     onAction={(key) =>
-                      key === "care"
+                      key === "notifications"
+                        ? nav("Notifications")
+                        : key === "care"
                         ? nav("Care Plan & Reports")
                         : key === "settings"
                           ? nav("Settings")
@@ -2047,6 +2049,10 @@ function App({ theme, setTheme, language, setLanguage, user, userData, onSignOut
                     <Dropdown.Item id="settings" textValue="Settings">
                       <MoreHorizontal size={16} />
                       Settings
+                    </Dropdown.Item>
+                    <Dropdown.Item id="notifications" textValue="Notifications">
+                      <Bell size={16} />
+                      Notifications
                     </Dropdown.Item>
                     <Dropdown.Item id="care" textValue="Privacy and care plan">
                       <ShieldCheckIcon size={16} />
